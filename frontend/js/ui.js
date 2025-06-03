@@ -4,6 +4,7 @@ class SudokuUI {
         this.gridElement = document.getElementById('sudoku-grid');
         this.timeElement = document.getElementById('time');
         this.messageElement = document.getElementById('message');
+        this.isCreationMode = false;
 
         this.setupEventListeners();
         this.setupTimerUpdate();
@@ -13,6 +14,7 @@ class SudokuUI {
     setupEventListeners() {
         // Game control buttons
         this.setupNewGameButton();
+        this.setupCreatePuzzleButton();
         this.setupHintButton();
         this.setupCheckSolutionButton();
         this.setupNotesButton();
@@ -31,6 +33,43 @@ class SudokuUI {
         });
     }
 
+    setupCreatePuzzleButton() {
+        const createButton = document.getElementById('create-puzzle');
+        const startGameButton = document.getElementById('start-game');
+        
+        createButton.addEventListener('click', () => {
+            this.isCreationMode = true;
+            this.game.startPuzzleCreation();
+            this.startPuzzleCreation(); // Disable controls
+            createButton.style.display = 'none';
+            startGameButton.style.display = 'block';
+            this.render();
+            this.showMessage('Creation mode: Enter your puzzle (minimum 17 numbers needed)');
+        });
+
+        startGameButton.addEventListener('click', () => {
+            if (this.game.validateCustomPuzzle()) {
+                if (this.game.finalizeCustomPuzzle()) {
+                    this.isCreationMode = false;
+                    createButton.style.display = 'block';
+                    startGameButton.style.display = 'none';
+                    
+                    // Re-enable all game controls
+                    document.getElementById('hint').disabled = false;
+                    document.getElementById('check').disabled = false;
+                    document.getElementById('notes-mode').disabled = false;
+                    
+                    this.render();
+                    this.showMessage('Custom puzzle started! Good luck!');
+                } else {
+                    this.showMessage('Error: Failed to create puzzle. Please try again.');
+                }
+            } else {
+                this.showMessage('Invalid puzzle! Need at least 17 numbers and a unique solution.');
+            }
+        });
+    }
+
     setupHintButton() {
         document.getElementById('hint').addEventListener('click', async () => {
             if (this.game.hintsRemaining > 0) {
@@ -38,6 +77,8 @@ class SudokuUI {
                 if (hint) {
                     this.render();
                     this.showMessage(`${hint.reason} (${this.game.hintsRemaining} hints remaining)`);
+                } else {
+                    this.showMessage('No more hints available!');
                 }
             } else {
                 this.showMessage('No hints remaining!');
@@ -48,12 +89,18 @@ class SudokuUI {
     setupCheckSolutionButton() {
         document.getElementById('check').addEventListener('click', async () => {
             const result = await this.game.checkSolution();
+            console.log('Check solution result:', result); // Debug log
+            
             if (result.solved) {
                 this.showMessage('Congratulations! Puzzle solved!');
-            } else if (result.showSolution) {
+                this.timeElement.textContent = this.game.getFormattedTime();
+                this.disableGameControls();
+            } else if (result.showSolution && result.solutionPath) {
+                console.log('Showing solution panel with path:', result.solutionPath); // Debug log
                 this.showSolutionPanel(result.solutionPath);
+                this.showMessage('Here is the step-by-step solution');
             } else {
-                this.showMessage('Not quite right yet. Click check again to see solution.');
+                this.showMessage('Keep trying! Click check again to see the solution.');
             }
         });
     }
@@ -114,7 +161,9 @@ class SudokuUI {
 
     setupTimerUpdate() {
         setInterval(() => {
-            this.timeElement.textContent = this.game.getFormattedTime();
+            if (!this.game.isCreating) {
+                this.timeElement.textContent = this.game.getFormattedTime();
+            }
         }, 1000);
     }
 
@@ -134,10 +183,31 @@ class SudokuUI {
     createCell(row, col) {
         const cell = document.createElement('div');
         cell.className = 'cell';
+        cell.dataset.row = row;
+        cell.dataset.col = col;
 
         this.applyCellBorders(cell, row, col);
-        this.populateCellContent(cell, row, col);
-        this.setupCellClickHandler(cell, row, col);
+        
+        const cellData = this.game.grid[row][col];
+        
+        if (this.isCreationMode) {
+            this.setupCreationModeCell(cell, row, col);
+            if (cellData.value !== 0) {
+                cell.textContent = cellData.value;
+            }
+        } else {
+            if (cellData.isFixed) {
+                cell.classList.add('fixed');
+            }
+            if (cellData.value !== 0) {
+                cell.textContent = cellData.value;
+            }
+            if (cellData.notes && cellData.notes.size > 0) {
+                const notesElement = this.createNotesElement(cellData.notes);
+                cell.appendChild(notesElement);
+            }
+            this.setupCellClickHandler(cell, row, col);
+        }
 
         return cell;
     }
@@ -147,30 +217,14 @@ class SudokuUI {
         if (col % 3 === 0) cell.style.borderLeft = '2px solid var(--grid-line-color)';
     }
 
-    populateCellContent(cell, row, col) {
-        const cellData = this.game.grid[row][col];
-
-        if (cellData) {
-            if (cellData.isFixed) {
-                cell.classList.add('fixed');
-            }
-            if (cellData.value !== 0) {
-                cell.textContent = cellData.value;
-            }
-
-            if (cellData.notes && cellData.notes.size > 0) {
-                const notesElement = this.createNotesElement(cellData.notes);
-                cell.appendChild(notesElement);
-            }
-        }
-    }
-
     createNotesElement(notes) {
         const notesElement = document.createElement('div');
         notesElement.className = 'notes';
 
+        // Create a 3x3 grid for notes
         for (let i = 1; i <= 9; i++) {
             const noteCell = document.createElement('div');
+            noteCell.className = 'note-cell';
             noteCell.textContent = notes.has(i) ? i : '';
             notesElement.appendChild(noteCell);
         }
@@ -228,6 +282,8 @@ class SudokuUI {
     }
 
     showSolutionPanel(solutionPath) {
+        console.log('Creating solution panel with path:', solutionPath); // Debug log
+        
         // Remove existing solution panel if any
         const existingPanel = document.querySelector('.solution-panel');
         if (existingPanel) {
@@ -252,49 +308,97 @@ class SudokuUI {
         controls.className = 'solution-controls';
         
         const prevButton = document.createElement('button');
-        prevButton.textContent = '← Previous Step';
+        prevButton.textContent = '← Previous';
         prevButton.className = 'solution-nav-button';
         
         const nextButton = document.createElement('button');
-        nextButton.textContent = 'Next Step →';
+        nextButton.textContent = 'Next →';
         nextButton.className = 'solution-nav-button';
         
         const autoPlayButton = document.createElement('button');
         autoPlayButton.textContent = 'Auto Play';
         autoPlayButton.className = 'solution-auto-button';
+
+        let currentStepIndex = -1;
+        const steps = solutionPath;
+        
+        const showStep = (index) => {
+            if (index >= 0 && index < steps.length) {
+                const step = steps[index];
+                console.log('Showing step:', step); // Debug log
+                
+                stepInfo.innerHTML = `
+                    <div class="step-header">
+                        <span class="strategy-badge">${step.strategy}</span>
+                        <span class="difficulty-badge">${step.difficulty}</span>
+                    </div>
+                    <p class="step-reason">${step.reason}</p>
+                `;
+
+                // Update the game grid
+                this.game.grid[step.row][step.col] = {
+                    value: step.value,
+                    isFixed: false,
+                    notes: new Set()
+                };
+                
+                // Re-render the grid
+                this.render();
+
+                // Highlight the current cell
+                const cellElement = document.querySelector(`.cell[data-row="${step.row}"][data-col="${step.col}"]`);
+                if (cellElement) {
+                    this.clearHighlights();
+                    cellElement.classList.add('solution-highlight');
+                }
+
+                currentStepIndex = index;
+                prevButton.disabled = currentStepIndex <= 0;
+                nextButton.disabled = currentStepIndex >= steps.length - 1;
+            }
+        };
         
         let autoPlayInterval = null;
         
-        autoPlayButton.addEventListener('click', () => {
+        const stopAutoPlay = () => {
             if (autoPlayInterval) {
                 clearInterval(autoPlayInterval);
                 autoPlayInterval = null;
                 autoPlayButton.textContent = 'Auto Play';
-            } else {
-                autoPlayButton.textContent = 'Stop';
-                autoPlayInterval = setInterval(() => {
-                    const step = this.game.getNextSolutionStep();
-                    if (step) {
-                        this.showSolutionStep(step);
-                    } else {
-                        clearInterval(autoPlayInterval);
-                        autoPlayButton.textContent = 'Auto Play';
-                    }
-                }, 2000); // Show a new step every 2 seconds
             }
-        });
+        };
 
         prevButton.addEventListener('click', () => {
-            const step = this.game.getPreviousSolutionStep();
-            if (step) {
-                this.showSolutionStep(step);
+            stopAutoPlay();
+            if (currentStepIndex > 0) {
+                showStep(currentStepIndex - 1);
             }
         });
 
         nextButton.addEventListener('click', () => {
-            const step = this.game.getNextSolutionStep();
-            if (step) {
-                this.showSolutionStep(step);
+            stopAutoPlay();
+            if (currentStepIndex < steps.length - 1) {
+                showStep(currentStepIndex + 1);
+            }
+        });
+
+        autoPlayButton.addEventListener('click', () => {
+            if (autoPlayInterval) {
+                stopAutoPlay();
+            } else {
+                autoPlayButton.textContent = 'Stop';
+                let index = currentStepIndex;
+                autoPlayInterval = setInterval(() => {
+                    index++;
+                    if (index >= steps.length) {
+                        stopAutoPlay();
+                        this.game.stopTimer();
+                        this.timeElement.textContent = this.game.getFormattedTime();
+                        this.disableGameControls();
+                    } else {
+                        showStep(index);
+                    }
+                }, 2000);
             }
         });
 
@@ -308,34 +412,74 @@ class SudokuUI {
         document.querySelector('.game-container').appendChild(panel);
         
         // Show the first step
-        const firstStep = this.game.getNextSolutionStep();
-        if (firstStep) {
-            this.showSolutionStep(firstStep);
+        if (steps.length > 0) {
+            showStep(0);
         }
     }
 
-    showSolutionStep(step) {
-        const stepInfo = document.querySelector('.step-info');
-        if (stepInfo) {
-            stepInfo.innerHTML = `
-                <div class="step-header">
-                    <span class="strategy-badge">${step.strategy}</span>
-                    <span class="difficulty-badge">Difficulty: ${step.difficulty}</span>
-                </div>
-                <p class="step-location">Row ${step.row + 1}, Column ${step.col + 1}: Place ${step.value}</p>
-                <p class="step-reason">${step.reason}</p>
-            `;
-        }
+    clearHighlights() {
+        document.querySelectorAll('.cell').forEach(cell => {
+            cell.classList.remove('solution-highlight', 'highlighted');
+        });
+    }
 
-        // Apply the move
-        this.game.applySolutionStep(step);
-        this.render();
+    setupCreationModeCell(cell, row, col) {
+        cell.contentEditable = true;
+        cell.classList.add('editable');
+        
+        // Handle keyboard input
+        cell.addEventListener('keydown', (e) => {
+            e.preventDefault();
+            const key = e.key;
+            if (/^[1-9]$/.test(key)) {
+                cell.textContent = key;
+                this.game.setCreationCell(row, col, parseInt(key));
+                this.highlightConflicts();
+            } else if (key === 'Backspace' || key === 'Delete' || key === '0') {
+                cell.textContent = '';
+                this.game.setCreationCell(row, col, 0);
+                this.highlightConflicts();
+            }
+        });
 
-        // Highlight the cell
-        this.clearHighlights();
-        const cell = document.querySelector(`.cell[data-row="${step.row}"][data-col="${step.col}"]`);
-        if (cell) {
-            cell.classList.add('solution-highlight');
-        }
+        // Handle cell selection
+        cell.addEventListener('click', () => {
+            this.clearSelection();
+            cell.classList.add('selected');
+        });
+    }
+
+    highlightConflicts() {
+        const conflicts = this.game.findConflicts();
+        document.querySelectorAll('.cell').forEach(cell => {
+            cell.classList.remove('conflict');
+        });
+
+        conflicts.forEach(({row, col}) => {
+            const cells = document.querySelectorAll('.cell');
+            const index = row * 9 + col;
+            if (cells[index]) {
+                cells[index].classList.add('conflict');
+            }
+        });
+    }
+
+    startPuzzleCreation() {
+        // Disable game controls during creation
+        document.getElementById('hint').disabled = true;
+        document.getElementById('check').disabled = true;
+        document.getElementById('notes-mode').disabled = true;
+        document.getElementById('notes-mode').classList.remove('active');
+        
+        // Reset and freeze the timer display
+        this.timeElement.textContent = '00:00';
+    }
+
+    disableGameControls() {
+        document.getElementById('hint').disabled = true;
+        document.getElementById('check').disabled = true;
+        document.getElementById('notes-mode').disabled = true;
+        document.querySelectorAll('.number').forEach(btn => btn.disabled = true);
+        document.getElementById('erase').disabled = true;
     }
 }
