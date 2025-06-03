@@ -282,13 +282,22 @@ class SudokuUI {
     }
 
     showSolutionPanel(solutionPath) {
-        console.log('Creating solution panel with path:', solutionPath); // Debug log
+        console.log('Creating solution panel with path:', solutionPath);
         
         // Remove existing solution panel if any
         const existingPanel = document.querySelector('.solution-panel');
         if (existingPanel) {
             existingPanel.remove();
         }
+
+        // Store initial grid state
+        const initialGrid = this.game.grid.map(row => 
+            row.map(cell => ({
+                value: cell.value,
+                isFixed: cell.isFixed,
+                notes: new Set(cell.notes)
+            }))
+        );
 
         const panel = document.createElement('div');
         panel.className = 'solution-panel';
@@ -321,36 +330,69 @@ class SudokuUI {
 
         let currentStepIndex = -1;
         const steps = solutionPath;
-        
+
         const showStep = (index) => {
             if (index >= 0 && index < steps.length) {
+                // Reset grid to initial state if going backwards
+                if (index < currentStepIndex) {
+                    this.game.grid = initialGrid.map(row => 
+                        row.map(cell => ({
+                            value: cell.value,
+                            isFixed: cell.isFixed,
+                            notes: new Set(cell.notes)
+                        }))
+                    );
+                    // Apply all steps up to current index
+                    for (let i = 0; i <= index; i++) {
+                        const step = steps[i];
+                        this.game.grid[step.row][step.col] = {
+                            value: step.value,
+                            isFixed: false,
+                            notes: new Set()
+                        };
+                    }
+                } else {
+                    // Apply just this step if going forward
+                    const step = steps[index];
+                    this.game.grid[step.row][step.col] = {
+                        value: step.value,
+                        isFixed: false,
+                        notes: new Set()
+                    };
+                }
+
                 const step = steps[index];
-                console.log('Showing step:', step); // Debug log
                 
+                // Update step info
                 stepInfo.innerHTML = `
                     <div class="step-header">
-                        <span class="strategy-badge">${step.strategy}</span>
-                        <span class="difficulty-badge">${step.difficulty}</span>
+                        <span class="strategy-badge ${step.difficulty.toLowerCase()}">${step.strategy}</span>
+                        <span class="difficulty-badge ${step.difficulty.toLowerCase()}">${step.difficulty}</span>
                     </div>
                     <p class="step-reason">${step.reason}</p>
                 `;
 
-                // Update the game grid
-                this.game.grid[step.row][step.col] = {
-                    value: step.value,
-                    isFixed: false,
-                    notes: new Set()
-                };
-                
-                // Re-render the grid
-                this.render();
+                // Clear all highlights
+                this.clearHighlights();
 
-                // Highlight the current cell
-                const cellElement = document.querySelector(`.cell[data-row="${step.row}"][data-col="${step.col}"]`);
-                if (cellElement) {
-                    this.clearHighlights();
-                    cellElement.classList.add('solution-highlight');
+                // Highlight the main cell
+                const mainCell = document.querySelector(`.cell[data-row="${step.row}"][data-col="${step.col}"]`);
+                if (mainCell) {
+                    mainCell.classList.add('solution-highlight');
                 }
+
+                // Highlight related cells
+                if (step.patternCells) {
+                    step.patternCells.forEach(cell => {
+                        const cellElement = document.querySelector(`.cell[data-row="${cell.row}"][data-col="${cell.col}"]`);
+                        if (cellElement) {
+                            cellElement.classList.add('pattern-highlight');
+                        }
+                    });
+                }
+
+                // Update the grid display
+                this.render();
 
                 currentStepIndex = index;
                 prevButton.disabled = currentStepIndex <= 0;
@@ -419,7 +461,7 @@ class SudokuUI {
 
     clearHighlights() {
         document.querySelectorAll('.cell').forEach(cell => {
-            cell.classList.remove('solution-highlight', 'highlighted');
+            cell.classList.remove('solution-highlight', 'pattern-highlight', 'highlighted');
         });
     }
 
