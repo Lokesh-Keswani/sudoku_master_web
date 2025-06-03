@@ -1,0 +1,325 @@
+:root {
+    --grid-line-color: #344861;
+    --cell-bg-color: #ffffff;
+    --fixed-number-color: #344861;
+    --input-number-color: #0066cc;
+    --highlight-color: #f0f0f0;
+    --selected-color: #e3f2fd;
+}
+
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 20px;
+    background-color: #f8f9fa;
+}
+
+.container {
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+header {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+h1 {
+    color: #344861;
+    margin-bottom: 20px;
+}
+
+.controls {
+    margin-bottom: 15px;
+}
+
+.controls button, .controls select {
+    margin: 0 5px;
+    padding: 8px 15px;
+    border: none;
+    border-radius: 4px;
+    background-color: #344861;
+    color: white;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.controls button:hover {
+    background-color: #4a6484;
+}
+
+.controls select {
+    background-color: white;
+    color: #344861;
+    border: 1px solid #344861;
+}
+
+.timer {
+    font-size: 1.2em;
+    color: #344861;
+    margin-bottom: 15px;
+}
+
+.game-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+}
+
+.sudoku-grid {
+    display: grid;
+    grid-template-columns: repeat(9, 1fr);
+    gap: 1px;
+    background-color: #d4d4d4;
+    border: 2px solid var(--grid-line-color);
+    width: 100%;
+    max-width: 500px;
+    aspect-ratio: 1;
+    padding: 2px;
+}
+
+.cell {
+    background-color: var(--cell-bg-color);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 1.5em;
+    position: relative;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    border: 1px solid #e0e0e0;
+}
+
+/* Add thicker borders for 3x3 boxes */
+.cell:nth-child(3n) {
+    border-right: 1px solid #e0e0e0;
+}
+
+.cell:nth-child(9n) {
+    border-right: none;
+}
+
+.cell:nth-child(n+19):nth-child(-n+27),
+.cell:nth-child(n+46):nth-child(-n+54) {
+    border-bottom: 2px solid var(--grid-line-color);
+}
+
+/* Add thicker borders for the outer edges of 3x3 boxes */
+.cell:nth-child(3n) {
+    border-right: 2px solid var(--grid-line-color);
+}
+
+.cell:nth-child(9n) {
+    border-right: none;
+}
+
+.cell:nth-child(n+1):nth-child(-n+9) {
+    border-top: none;
+}
+
+.cell:nth-child(9n+1) {
+    border-left: none;
+}
+
+.cell.fixed {
+    color: var(--fixed-number-color);
+    font-weight: bold;
+}
+
+.cell:not(.fixed) {
+    color: var(--input-number-color);
+}
+
+.cell.highlighted {
+    background-color: var(--highlight-color);
+}
+
+.cell.selected {
+    background-color: var(--selected-color);
+}
+
+.notes {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+    font-size: 0.35em;
+    color: #666;
+}
+
+.notes div {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.number-pad {
+    width: 100%;
+    max-width: 500px;
+}
+
+.numbers {
+    display: grid;
+    grid-template-columns: repeat(9, 1fr);
+    gap: 5px;
+    margin-bottom: 10px;
+}
+
+.actions {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 5px;
+}
+
+.number-pad button {
+    padding: 10px;
+    border: none;
+    border-radius: 4px;
+    background-color: #344861;
+    color: white;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.number-pad button:hover {
+    background-color: #4a6484;
+}
+
+.number-pad button.active {
+    background-color: #4CAF50;
+}
+
+.message {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: #333;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 4px;
+    opacity: 0;
+    transition: opacity 0.3s;
+}
+
+.message.show {
+    opacity: 1;
+}
+
+/* Remove all hint-related styles */
+.hint-panel,
+.hint-text,
+.hint-controls,
+.hint-nav-button,
+.hint-apply-button,
+.hint-highlight {
+    display: none;
+}
+
+/* Solution Panel Styles */
+.solution-panel {
+    margin-top: 20px;
+    padding: 20px;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    width: 100%;
+    max-width: 500px;
+}
+
+.solution-panel h3 {
+    margin: 0 0 15px 0;
+    color: #344861;
+    text-align: center;
+}
+
+.solution-content {
+    margin-bottom: 20px;
+}
+
+.step-info {
+    background-color: white;
+    padding: 15px;
+    border-radius: 6px;
+    margin-bottom: 15px;
+}
+
+.step-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.strategy-badge {
+    background-color: #4CAF50;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+
+.difficulty-badge {
+    background-color: #f0f0f0;
+    color: #666;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+
+.step-location {
+    font-size: 1.1em;
+    color: #344861;
+    margin: 10px 0;
+}
+
+.step-reason {
+    color: #666;
+    font-style: italic;
+    margin: 5px 0;
+}
+
+.solution-controls {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.solution-nav-button {
+    padding: 8px 15px;
+    background-color: #e0e0e0;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    flex: 1;
+}
+
+.solution-nav-button:hover {
+    background-color: #d0d0d0;
+}
+
+.solution-auto-button {
+    padding: 8px 20px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    flex: 1;
+}
+
+.solution-auto-button:hover {
+    background-color: #45a049;
+}
+
+.solution-highlight {
+    background-color: #e8f5e9 !important;
+    border: 2px solid #4CAF50 !important;
+} 

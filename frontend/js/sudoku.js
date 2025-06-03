@@ -21,6 +21,14 @@ class SudokuGame {
         this.startTime = null;
         this.elapsedTime = 0;
         this.timerInterval = null;
+
+        // New hint management
+        this.currentHints = [];
+        this.currentHintIndex = 0;
+
+        // Solution path management
+        this.solutionPath = null;
+        this.currentSolutionStep = 0;
     }
 
     async newGame(difficulty = 'medium') {
@@ -160,19 +168,58 @@ class SudokuGame {
             if (!response.ok) throw new Error('Failed to get hint');
 
             const data = await response.json();
-            if (data.hint) {
+            if (data.moves && data.moves.length > 0) {
+                // Directly apply the first move
+                const move = data.moves[0];
+                this.grid[move.row][move.col] = {
+                    value: move.value,
+                    isFixed: false,
+                    notes: new Set()
+                };
                 this.hintsRemaining--;
-                const { row, col, value } = data.hint;
-                this.saveState();
-                this.grid[row][col].value = value;
-                this.grid[row][col].notes.clear();
-                return data.hint;
+                return move;
             }
             return null;
         } catch (error) {
             console.error('Error getting hint:', error);
             return null;
         }
+    }
+
+    getCurrentHint() {
+        if (!this.currentHints || this.currentHintIndex >= this.currentHints.length) {
+            return null;
+        }
+        return this.currentHints[this.currentHintIndex];
+    }
+
+    getNextHint() {
+        if (!this.currentHints || this.currentHintIndex >= this.currentHints.length - 1) {
+            return null;
+        }
+        this.currentHintIndex++;
+        return this.getCurrentHint();
+    }
+
+    getPreviousHint() {
+        if (!this.currentHints || this.currentHintIndex <= 0) {
+            return null;
+        }
+        this.currentHintIndex--;
+        return this.getCurrentHint();
+    }
+
+    applyCurrentHint() {
+        const hint = this.getCurrentHint();
+        if (hint) {
+            this.saveState();
+            const { row, col, value } = hint;
+            this.grid[row][col].value = value;
+            this.grid[row][col].notes.clear();
+            this.redoStack = [];
+            return true;
+        }
+        return false;
     }
 
     async checkSolution() {
@@ -182,34 +229,57 @@ class SudokuGame {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     grid: this.grid.map(row => row.map(cell => cell.value || 0)),
+                    solution: this.solution,
                     difficulty: this.difficulty
                 })
             });
 
             if (!response.ok) throw new Error('Failed to check solution');
 
-            const { solved } = await response.json();
+            const data = await response.json();
             this.checkCount++;
 
-            if (solved) {
+            if (data.solved) {
                 this.stopTimer();
                 return { solved: true };
-            } else if (this.checkCount >= 2) {
-                // Show solution on second check
-                this.grid = this.solution.map(row => row.map(value => ({
-                    value: value,
-                    isFixed: true,
-                    notes: new Set()
-                })));
-                this.stopTimer();
-                this.checkCount = 0;
-                return { solved: false, showedSolution: true };
+            } else if (data.solution_path && data.solution_path.length > 0) {
+                // Store the solution path for step-by-step playback
+                this.solutionPath = data.solution_path;
+                this.currentSolutionStep = 0;
+                return { 
+                    solved: false, 
+                    showSolution: true,
+                    solutionPath: data.solution_path 
+                };
             }
-            return { solved: false, showedSolution: false };
+            return { solved: false, showSolution: false };
         } catch (error) {
             console.error('Error checking solution:', error);
-            return { solved: false, showedSolution: false };
+            return { solved: false, showSolution: false };
         }
+    }
+
+    getNextSolutionStep() {
+        if (!this.solutionPath || this.currentSolutionStep >= this.solutionPath.length) {
+            return null;
+        }
+        return this.solutionPath[this.currentSolutionStep++];
+    }
+
+    getPreviousSolutionStep() {
+        if (!this.solutionPath || this.currentSolutionStep <= 1) {
+            return null;
+        }
+        this.currentSolutionStep -= 2;
+        return this.solutionPath[this.currentSolutionStep++];
+    }
+
+    applySolutionStep(step) {
+        if (step) {
+            this.grid[step.row][step.col].value = step.value;
+            return true;
+        }
+        return false;
     }
 
     // History management methods

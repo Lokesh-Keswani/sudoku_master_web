@@ -47,31 +47,31 @@ async def validate_move(move: SudokuMove, puzzle: SudokuPuzzle):
 
 @router.post("/check-solution")
 async def check_solution(puzzle: SudokuPuzzle):
-    """Check if the puzzle is solved correctly."""
+    """Check if the puzzle is solved correctly and return solution path if requested."""
     try:
         is_solved = generator.is_solved(puzzle.grid)
-        return {"solved": is_solved}
+        if not is_solved and puzzle.solution:
+            # Get the complete solution path
+            solution_path = generator.get_solution_path(puzzle.grid, puzzle.solution)
+            return {
+                "solved": False,
+                "solution_path": solution_path
+            }
+        return {"solved": is_solved, "solution_path": []}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.post("/hint")
 async def get_hint(puzzle: SudokuPuzzle):
-    """Get a hint for the next move."""
+    """Get optimal moves with explanations for the next steps."""
     try:
         if not puzzle.solution:
             raise HTTPException(status_code=400, detail="No solution available")
             
-        hint = generator.get_hint(puzzle.grid, puzzle.solution)
-        if hint is None:
-            return {"hint": None}
+        moves = generator.get_optimal_moves(puzzle.grid, puzzle.solution)
+        if not moves:
+            return {"moves": []}
             
-        row, col, value = hint
-        return {
-            "hint": {
-                "row": row,
-                "col": col,
-                "value": value
-            }
-        }
+        return {"moves": moves}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e)) 
