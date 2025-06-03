@@ -8,6 +8,8 @@
     --grid-line-color: #121212;
     --cell-highlight-color: #e3f2fd;
     --cell-conflict-color: #ffebee;
+    --grid-thin-line: 1.5px;
+    --grid-thick-line: 4px;
 }
 
 * {
@@ -85,11 +87,14 @@ select {
 .sudoku-grid {
     display: grid;
     grid-template-columns: repeat(9, 1fr);
-    gap: 1px;
+    gap: 0;
     background-color: var(--grid-line-color);
-    padding: 2px;
-    border: 2px solid var(--grid-line-color);
+    padding: var(--grid-thin-line);
+    border: var(--grid-thick-line) solid var(--grid-line-color);
     aspect-ratio: 1;
+    width: 100%;
+    max-width: 500px;
+    margin: 0 auto;
 }
 
 .cell {
@@ -101,6 +106,26 @@ select {
     font-size: 1.5em;
     cursor: pointer;
     position: relative;
+    border: var(--grid-thin-line) solid var(--grid-line-color);
+}
+
+/* Add thick borders for 3x3 sections */
+.cell:nth-child(3n):not(:nth-child(9n)) {
+    border-right: var(--grid-thick-line) solid var(--grid-line-color);
+}
+
+.cell:nth-child(n+19):nth-child(-n+27),
+.cell:nth-child(n+46):nth-child(-n+54) {
+    border-bottom: var(--grid-thick-line) solid var(--grid-line-color);
+}
+
+/* Increase spacing between cells */
+.cell:not(:nth-child(9n)) {
+    margin-right: calc(var(--grid-thin-line) * -1);
+}
+
+.cell:not(:nth-child(n+73)) {
+    margin-bottom: calc(var(--grid-thin-line) * -1);
 }
 
 .cell.fixed {
