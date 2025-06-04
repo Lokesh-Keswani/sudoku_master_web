@@ -322,4 +322,28 @@ h1 {
 .solution-highlight {
     background-color: #e8f5e9 !important;
     border: 2px solid #4CAF50 !important;
+}
+
+.download-button {
+    background-color: #4CAF50;
+    color: white;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    margin: 0 5px;
+    transition: background-color 0.3s;
+}
+
+.download-button:hover {
+    background-color: #45a049;
+}
+
+/* Ensure controls container can accommodate the new button */
+header .controls {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 5px;
 } 

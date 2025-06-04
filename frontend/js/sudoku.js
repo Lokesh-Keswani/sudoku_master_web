@@ -28,12 +28,16 @@ class SudokuGame {
         this.elapsedTime = 0;
         this.timerInterval = null;
 
+        // Solution tracking
+        this.allSolutionSteps = [];  // Store all steps including hints and solution moves
+        this.currentStepIndex = -1;
+
         // New hint management
         this.currentHints = [];
         this.currentHintIndex = 0;
 
         // Solution path management
-        this.solutionPath = null;
+        this.solutionPath = [];
         this.currentSolutionStep = 0;
 
         // Custom puzzle creation state
@@ -104,49 +108,45 @@ class SudokuGame {
 
         if (!this.isValidMove(row, col)) return false;
 
-        // Handle notes mode
+        // If in notes mode, handle note toggling
         if (this.isNotesMode) {
             return this.toggleNote(row, col, value);
         }
 
-        // Handle erasing - don't need to validate with server
-        if (value === 0) {
-            this.saveState();
-            this.grid[row][col].value = 0;
-            this.grid[row][col].notes.clear();
-            this.redoStack = [];
-            return true;
-        }
-
-        // Handle regular move
-        try {
-            const response = await fetch('http://localhost:8000/api/sudoku/validate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    move: { row, col, value },
-                    puzzle: {
-                        grid: this.grid.map(row => row.map(cell => cell.value || 0)),
-                        difficulty: this.difficulty
-                    }
-                })
-            });
-
-            if (!response.ok) throw new Error('Failed to validate move');
-
-            const { valid } = await response.json();
-            if (valid) {
-                this.saveState();
-                this.grid[row][col].value = value;
-                this.grid[row][col].notes.clear();
-                this.redoStack = [];
-                return true;
+        // For regular moves, validate the move first
+        if (value !== 0) { // Skip validation for erasing (value = 0)
+            // Check if the move violates Sudoku rules
+            if (!this.isValidPlacement(this.grid, row, col, value)) {
+                console.log('Invalid move: violates Sudoku rules');
+                return false;
             }
-            return false;
-        } catch (error) {
-            console.error('Error validating move:', error);
-            return false;
         }
+
+        // Save the current state for undo
+                this.saveState();
+
+        const oldValue = this.grid[row][col].value;
+                this.grid[row][col].value = value;
+        this.grid[row][col].notes.clear(); // Clear notes when placing a value
+
+        // Add move to solution steps if it's correct
+        if (value !== 0 && this.solution && value === this.solution[row][col]) {
+            const step = {
+                row,
+                col,
+                value,
+                strategy: 'Player Move',
+                technique: 'player_move',
+                reason: 'Player placed this number manually',
+                difficulty: 'Basic',
+                relatedCells: this.getRelatedCells(row, col),
+                timestamp: Date.now()
+            };
+            this.allSolutionSteps.push(step);
+            this.currentStepIndex = this.allSolutionSteps.length - 1;
+        }
+
+                return true;
     }
 
     toggleNote(row, col, value) {
@@ -197,6 +197,13 @@ class SudokuGame {
         // Take the best move as the hint
         const bestMove = possibleMoves[0];
         
+        // Add timestamp to the move
+        bestMove.timestamp = Date.now();
+        
+        // Store the hint in solution steps
+        this.allSolutionSteps.push(bestMove);
+        this.currentStepIndex = this.allSolutionSteps.length - 1;
+        
         // Apply the hint
         this.saveState();
         this.grid[bestMove.row][bestMove.col] = {
@@ -206,16 +213,7 @@ class SudokuGame {
         };
         this.hintsRemaining--;
 
-        return {
-            row: bestMove.row,
-            col: bestMove.col,
-            value: bestMove.value,
-            reason: bestMove.reason,
-            strategy: bestMove.strategy,
-            difficulty: bestMove.difficulty,
-            highlightCells: bestMove.highlightCells,
-            patternCells: bestMove.patternCells
-        };
+        return bestMove;
     }
 
     getCurrentHint() {
@@ -255,10 +253,11 @@ class SudokuGame {
     }
 
     async checkSolution() {
+        console.log('Checking solution...'); // Debug log
         const currentGrid = this.grid.map(row => row.map(cell => cell.value));
         
-        // For custom puzzles, check against stored solution
         if (this.solution) {
+            console.log('Checking against stored solution'); // Debug log
             let isSolved = true;
             let hasEmptyCells = false;
 
@@ -273,153 +272,328 @@ class SudokuGame {
                 }
             }
             
+            console.log('Check results - Solved:', isSolved, 'Empty cells:', hasEmptyCells); // Debug log
+            
             if (isSolved && !hasEmptyCells) {
                 this.stopTimer();
                 return { solved: true };
             }
             
-            // Generate solution path
+            // Generate remaining solution steps
+            const remainingSteps = this.generateRemainingSteps();
+            if (remainingSteps.length > 0) {
+                // Add timestamp to each step
+                remainingSteps.forEach(step => {
+                    step.timestamp = Date.now();
+                    this.allSolutionSteps.push(step);
+                });
+                this.currentStepIndex = this.allSolutionSteps.length - 1;
+            }
+            
             return { 
                 solved: false, 
                 showSolution: true,
-                solutionPath: this.generateSolutionPath()
+                solutionPath: remainingSteps
             };
         }
 
-        // For regular puzzles, use the API
-        try {
-            const response = await fetch('http://localhost:8000/api/sudoku/check-solution', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    grid: currentGrid,
-                    solution: this.solution,
-                    difficulty: this.difficulty
-                })
-            });
+        // For regular puzzles, check if all cells are filled and valid
+        let isComplete = true;
+        let isValid = true;
 
-            if (!response.ok) throw new Error('Failed to check solution');
-
-            const data = await response.json();
-
-            if (data.solved) {
-                this.stopTimer();
-                return { solved: true };
-            } else {
-                return { 
-                    solved: false, 
-                    showSolution: true,
-                    solutionPath: data.solution_path 
-                };
+        // Check if all cells are filled
+        for (let row = 0; row < 9; row++) {
+            for (let col = 0; col < 9; col++) {
+                if (currentGrid[row][col] === 0) {
+                    isComplete = false;
+                    break;
+                }
             }
-        } catch (error) {
-            console.error('Error checking solution:', error);
+            if (!isComplete) break;
+        }
+
+        if (!isComplete) {
             return { solved: false, showSolution: false };
         }
+
+        // Check rows
+        for (let row = 0; row < 9; row++) {
+            const seen = new Set();
+            for (let col = 0; col < 9; col++) {
+                const value = currentGrid[row][col];
+                if (seen.has(value)) {
+                    isValid = false;
+                    break;
+                }
+                seen.add(value);
+            }
+            if (!isValid) break;
+        }
+
+        // Check columns
+        if (isValid) {
+            for (let col = 0; col < 9; col++) {
+                const seen = new Set();
+                for (let row = 0; row < 9; row++) {
+                    const value = currentGrid[row][col];
+                    if (seen.has(value)) {
+                        isValid = false;
+                        break;
+                    }
+                    seen.add(value);
+                }
+                if (!isValid) break;
+            }
+        }
+
+        // Check 3x3 boxes
+        if (isValid) {
+            for (let boxRow = 0; boxRow < 3; boxRow++) {
+                for (let boxCol = 0; boxCol < 3; boxCol++) {
+                    const seen = new Set();
+                    for (let i = 0; i < 3; i++) {
+                        for (let j = 0; j < 3; j++) {
+                            const value = currentGrid[boxRow * 3 + i][boxCol * 3 + j];
+                            if (seen.has(value)) {
+                                isValid = false;
+                                break;
+                            }
+                            seen.add(value);
+                        }
+                        if (!isValid) break;
+                    }
+                    if (!isValid) break;
+                }
+                if (!isValid) break;
+            }
+        }
+
+        console.log('Puzzle check results - Complete:', isComplete, 'Valid:', isValid); // Debug log
+
+        if (isValid && isComplete) {
+                this.stopTimer();
+                return { solved: true };
+        }
+
+            return { solved: false, showSolution: false };
     }
 
-    generateSolutionPath() {
-        const path = [];
-        const currentGrid = this.grid.map(row => row.map(cell => cell.value));
+    generateRemainingSteps() {
+        console.log('Generating remaining solution steps...'); // Debug log
         
-        while (!this.isGridComplete(currentGrid)) {
-            // Find all possible moves and score them
-            const possibleMoves = [];
+        // Create a deep copy of the current grid
+        const currentGrid = this.grid.map(row => row.map(cell => ({
+            value: cell.value,
+            isFixed: cell.isFixed
+        })));
+
+        const remainingSteps = [];
+        const filledCells = new Set();
+
+        // First pass: Find all naked singles and hidden singles
+        let foundMove;
+        do {
+            foundMove = false;
+            
+            // Try each empty cell
+            for (let row = 0; row < 9; row++) {
+                for (let col = 0; col < 9; col++) {
+                    // Skip if cell is already filled
+                    if (currentGrid[row][col].value !== 0 || filledCells.has(`${row},${col}`)) {
+                        continue;
+                    }
+
+                    const targetValue = this.solution[row][col];
+                    const moveInfo = this.analyzeMoveQuality(currentGrid, row, col, targetValue);
+                    
+                    // Only proceed with basic techniques first
+                    if (moveInfo && (moveInfo.technique === 'naked_single' || 
+                                   moveInfo.technique.startsWith('hidden_single'))) {
+                        remainingSteps.push(moveInfo);
+                        currentGrid[row][col].value = targetValue;
+                        filledCells.add(`${row},${col}`);
+                        foundMove = true;
+                        console.log(`Found ${moveInfo.strategy} at R${row + 1}C${col + 1} = ${targetValue}`);
+                        break;
+                    }
+                }
+                if (foundMove) break;
+            }
+        } while (foundMove);
+
+        // Second pass: Find pointing pairs/triples and box/line reductions
+        do {
+            foundMove = false;
             
             for (let row = 0; row < 9; row++) {
                 for (let col = 0; col < 9; col++) {
-                    if (currentGrid[row][col] === 0) {
-                        const value = this.solution[row][col];
-                        const moveInfo = this.analyzeMoveQuality(currentGrid, row, col, value);
-                        if (moveInfo) {
-                            possibleMoves.push(moveInfo);
-                        }
+                    if (currentGrid[row][col].value !== 0 || filledCells.has(`${row},${col}`)) {
+                        continue;
+                    }
+
+                    const targetValue = this.solution[row][col];
+                    const moveInfo = this.analyzeMoveQuality(currentGrid, row, col, targetValue);
+                    
+                    // Look for intermediate techniques
+                    if (moveInfo && (moveInfo.technique === 'pointing_combination' || 
+                                   moveInfo.technique === 'box_line_reduction')) {
+                        remainingSteps.push(moveInfo);
+                        currentGrid[row][col].value = targetValue;
+                        filledCells.add(`${row},${col}`);
+                        foundMove = true;
+                        console.log(`Found ${moveInfo.strategy} at R${row + 1}C${col + 1} = ${targetValue}`);
+                        break;
                     }
                 }
+                if (foundMove) break;
             }
+        } while (foundMove);
 
-            // Sort moves by their strategic value (easier techniques first)
-            possibleMoves.sort((a, b) => a.score - b.score);
-
-            if (possibleMoves.length === 0) break;
-
-            // Take the best move
-            const bestMove = possibleMoves[0];
-            path.push(bestMove);
-            currentGrid[bestMove.row][bestMove.col] = bestMove.value;
+        // Final pass: Use logical deduction for remaining cells
+        // Sort remaining cells by constraint (cells with fewer possibilities first)
+        const remainingCells = [];
+        for (let row = 0; row < 9; row++) {
+            for (let col = 0; col < 9; col++) {
+                if (currentGrid[row][col].value === 0 && !filledCells.has(`${row},${col}`)) {
+                    remainingCells.push({ row, col });
+                }
+            }
         }
 
-        return path;
+        // Sort by number of possibilities (most constrained first)
+        remainingCells.sort((a, b) => {
+            const possibilitiesA = this.getPossibleValues(currentGrid, a.row, a.col).size;
+            const possibilitiesB = this.getPossibleValues(currentGrid, b.row, b.col).size;
+            return possibilitiesA - possibilitiesB;
+        });
+
+        // Process remaining cells in order of constraint
+        for (const cell of remainingCells) {
+            const { row, col } = cell;
+            const targetValue = this.solution[row][col];
+            const moveInfo = this.analyzeMoveQuality(currentGrid, row, col, targetValue);
+            
+            if (moveInfo) {
+                remainingSteps.push(moveInfo);
+                currentGrid[row][col].value = targetValue;
+                filledCells.add(`${row},${col}`);
+                console.log(`Found ${moveInfo.strategy} at R${row + 1}C${col + 1} = ${targetValue}`);
+            }
+        }
+
+        console.log(`Generated ${remainingSteps.length} remaining steps`);
+        return remainingSteps;
+    }
+
+    getAllSolutionSteps() {
+        // Get all recorded steps (player moves and hints)
+        const recordedSteps = [...this.allSolutionSteps].sort((a, b) => a.timestamp - b.timestamp);
+        
+        // If we have all cells filled, return just the recorded steps
+        if (this.isGridComplete(this.grid)) {
+            return recordedSteps;
+        }
+
+        // Generate remaining steps using strategic approach
+        const remainingSteps = this.generateRemainingSteps();
+        
+        // Add timestamps to remaining steps, starting after the last recorded step
+        const lastTimestamp = recordedSteps.length > 0 
+            ? recordedSteps[recordedSteps.length - 1].timestamp 
+            : Date.now();
+            
+        remainingSteps.forEach((step, index) => {
+            step.timestamp = lastTimestamp + (index + 1) * 1000; // Space them 1 second apart
+        });
+
+        // Combine recorded and remaining steps
+        return [...recordedSteps, ...remainingSteps];
+    }
+
+    isGridComplete(grid) {
+        for (let row = 0; row < 9; row++) {
+            for (let col = 0; col < 9; col++) {
+                if (grid[row][col].value === 0) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     analyzeMoveQuality(grid, row, col, value) {
-        // Count how many instances of this number exist in related cells
-        let numberCount = 0;
-        let possiblePositions = 0;
-
-        // Check row
-        for (let c = 0; c < 9; c++) {
-            if (grid[row][c] === value) numberCount++;
-            if (grid[row][c] === 0) possiblePositions++;
-        }
-
-        // Check column
-        for (let r = 0; r < 9; r++) {
-            if (grid[r][col] === value) numberCount++;
-            if (grid[r][col] === 0) possiblePositions++;
-        }
-
-        // Check box
-        const boxRow = Math.floor(row / 3) * 3;
-        const boxCol = Math.floor(col / 3) * 3;
-        for (let r = 0; r < 3; r++) {
-            for (let c = 0; c < 3; c++) {
-                if (grid[boxRow + r][boxCol + c] === value) numberCount++;
-                if (grid[boxRow + r][boxCol + c] === 0) possiblePositions++;
-            }
-        }
-
-        // Check if this is the only possible position for this number
-        const isOnlyPosition = this.isOnlyPossiblePosition(grid, row, col, value);
-
-        // Check if this cell has only one possible value
-        const hasOnePossibility = this.countPossibleValues(grid, row, col) === 1;
-
-        // Calculate a score for this move (lower is better)
-        let score = 10; // Base score
+        // Initialize analysis result
+        let score = 10;
         let strategy = '';
         let reason = '';
         let difficulty = '';
+        let technique = '';
+        let relatedCells = [];
 
-        if (isOnlyPosition && hasOnePossibility) {
+        // Get all possible values for this cell
+        const possibleValues = this.getPossibleValues(grid, row, col);
+        
+        // Check for naked single (only one possible value for this cell)
+        if (possibleValues.size === 1) {
             score = 1;
-            strategy = 'Forced Move';
-            reason = `${value} is the only possible number for this cell, and this cell is the only possible position for ${value}`;
+            strategy = 'Naked Single';
+            technique = 'naked_single';
+            reason = `Only the number ${value} can be placed in this cell as all other numbers are eliminated`;
             difficulty = 'Basic';
-        } else if (hasOnePossibility) {
+            relatedCells = this.getConflictingCells(grid, row, col, value);
+        }
+        // Check for hidden single in row
+        else if (this.isHiddenSingle(grid, row, col, value, 'row')) {
             score = 2;
-            strategy = 'Single Candidate';
-            reason = `${value} is the only possible number for this cell`;
+            strategy = 'Hidden Single (Row)';
+            technique = 'hidden_single_row';
+            reason = `${value} can only go in this cell in row ${row + 1}`;
             difficulty = 'Basic';
-        } else if (isOnlyPosition) {
+            relatedCells = this.getRowCells(row, col);
+        }
+        // Check for hidden single in column
+        else if (this.isHiddenSingle(grid, row, col, value, 'column')) {
+            score = 2;
+            strategy = 'Hidden Single (Column)';
+            technique = 'hidden_single_column';
+            reason = `${value} can only go in this cell in column ${col + 1}`;
+            difficulty = 'Basic';
+            relatedCells = this.getColumnCells(row, col);
+        }
+        // Check for hidden single in box
+        else if (this.isHiddenSingle(grid, row, col, value, 'box')) {
+            score = 2;
+            strategy = 'Hidden Single (Box)';
+            technique = 'hidden_single_box';
+            reason = `${value} can only go in this cell in this 3x3 box`;
+            difficulty = 'Basic';
+            relatedCells = this.getBoxCells(row, col);
+        }
+        // Check for pointing pair/triple
+        else if (this.isPointingCombination(grid, row, col, value)) {
             score = 3;
-            strategy = 'Hidden Single';
-            reason = `This is the only position where ${value} can go in this ${this.getRegionType(row, col, value)}`;
-            difficulty = 'Basic';
-        } else if (numberCount >= 6) { // If number appears frequently
+            strategy = 'Pointing Combination';
+            technique = 'pointing_combination';
+            reason = `${value} must be in this cell due to a pointing pair/triple configuration`;
+            difficulty = 'Intermediate';
+            relatedCells = this.getPointingCombinationCells(grid, row, col, value);
+        }
+        // Check for box/line reduction
+        else if (this.isBoxLineReduction(grid, row, col, value)) {
             score = 4;
-            strategy = 'Pattern Recognition';
-            reason = `${value} appears frequently in related regions, limiting its possible positions`;
+            strategy = 'Box/Line Reduction';
+            technique = 'box_line_reduction';
+            reason = `${value} must be in this cell due to box/line reduction pattern`;
             difficulty = 'Intermediate';
-        } else if (possiblePositions <= 3) { // Few possible positions
-            score = 5;
-            strategy = 'Limited Positions';
-            reason = `Limited positions available for ${value} in this region`;
-            difficulty = 'Intermediate';
-        } else {
+            relatedCells = this.getBoxLineCells(row, col);
+        }
+        // Default logical deduction
+        else {
             strategy = 'Logical Deduction';
-            reason = `Place ${value} based on remaining possibilities`;
+            technique = 'logical_deduction';
+            reason = `Place ${value} based on remaining possibilities and elimination`;
             difficulty = 'Advanced';
+            relatedCells = this.getRelatedCells(row, col);
         }
 
         return {
@@ -428,66 +602,29 @@ class SudokuGame {
             value,
             score,
             strategy,
+            technique,
             reason,
             difficulty,
-            highlightCells: [{ row, col }],
-            patternCells: this.getRelatedCells(row, col)
+            relatedCells,
+            patternCells: relatedCells
         };
     }
 
-    isOnlyPossiblePosition(grid, row, col, value) {
-        // Check if this is the only position in row where value can go
-        let rowPossible = 0;
-        for (let c = 0; c < 9; c++) {
-            if (grid[row][c] === 0 && this.isValidPlacement(grid, row, c, value)) {
-                rowPossible++;
-            }
-        }
-        if (rowPossible === 1) return true;
-
-        // Check if this is the only position in column where value can go
-        let colPossible = 0;
-        for (let r = 0; r < 9; r++) {
-            if (grid[r][col] === 0 && this.isValidPlacement(grid, r, col, value)) {
-                colPossible++;
-            }
-        }
-        if (colPossible === 1) return true;
-
-        // Check if this is the only position in box where value can go
-        let boxPossible = 0;
-        const boxRow = Math.floor(row / 3) * 3;
-        const boxCol = Math.floor(col / 3) * 3;
-        for (let r = 0; r < 3; r++) {
-            for (let c = 0; c < 3; c++) {
-                if (grid[boxRow + r][boxCol + c] === 0 && 
-                    this.isValidPlacement(grid, boxRow + r, boxCol + c, value)) {
-                    boxPossible++;
-                }
-            }
-        }
-        return boxPossible === 1;
-    }
-
-    countPossibleValues(grid, row, col) {
-        let count = 0;
-        for (let value = 1; value <= 9; value++) {
-            if (this.isValidPlacement(grid, row, col, value)) {
-                count++;
-            }
-        }
-        return count;
-    }
-
-    isValidPlacement(grid, row, col, value) {
+    getPossibleValues(grid, row, col) {
+        const possible = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+        
         // Check row
         for (let c = 0; c < 9; c++) {
-            if (grid[row][c] === value) return false;
+            if (c !== col && grid[row][c].value !== 0) {
+                possible.delete(grid[row][c].value);
+            }
         }
 
         // Check column
         for (let r = 0; r < 9; r++) {
-            if (grid[r][col] === value) return false;
+            if (r !== row && grid[r][col].value !== 0) {
+                possible.delete(grid[r][col].value);
+            }
         }
 
         // Check box
@@ -495,35 +632,217 @@ class SudokuGame {
         const boxCol = Math.floor(col / 3) * 3;
         for (let r = 0; r < 3; r++) {
             for (let c = 0; c < 3; c++) {
-                if (grid[boxRow + r][boxCol + c] === value) return false;
+                const currentRow = boxRow + r;
+                const currentCol = boxCol + c;
+                if ((currentRow !== row || currentCol !== col) && 
+                    grid[currentRow][currentCol].value !== 0) {
+                    possible.delete(grid[currentRow][currentCol].value);
+                }
+            }
+        }
+        
+        return possible;
+    }
+
+    isHiddenSingle(grid, row, col, value, type) {
+        let count = 0;
+        let possiblePositions = 0;
+        
+        if (type === 'row') {
+            for (let c = 0; c < 9; c++) {
+                if (c !== col && grid[row][c].value === 0) {
+                    if (this.isValidPlacement(grid, row, c, value)) {
+                count++;
+            }
+                    possiblePositions++;
+                }
+            }
+        } else if (type === 'column') {
+            for (let r = 0; r < 9; r++) {
+                if (r !== row && grid[r][col].value === 0) {
+                    if (this.isValidPlacement(grid, r, col, value)) {
+                        count++;
+                    }
+                    possiblePositions++;
+                }
+            }
+        } else if (type === 'box') {
+            const boxRow = Math.floor(row / 3) * 3;
+            const boxCol = Math.floor(col / 3) * 3;
+            for (let r = 0; r < 3; r++) {
+                for (let c = 0; c < 3; c++) {
+                    const currentRow = boxRow + r;
+                    const currentCol = boxCol + c;
+                    if ((currentRow !== row || currentCol !== col) && 
+                        grid[currentRow][currentCol].value === 0) {
+                        if (this.isValidPlacement(grid, currentRow, currentCol, value)) {
+                            count++;
+                        }
+                        possiblePositions++;
+                    }
+                }
+            }
+        }
+        
+        return count === 0 && possiblePositions > 0;
+    }
+
+    getConflictingCells(grid, row, col, value) {
+        const cells = [];
+        
+        // Check row
+        for (let c = 0; c < 9; c++) {
+            if (c !== col && grid[row][c] === value) {
+                cells.push({ row, col: c });
             }
         }
 
-        return true;
+        // Check column
+        for (let r = 0; r < 9; r++) {
+            if (r !== row && grid[r][col] === value) {
+                cells.push({ row: r, col });
+            }
+        }
+
+        // Check box
+        const boxRow = Math.floor(row / 3) * 3;
+        const boxCol = Math.floor(col / 3) * 3;
+        for (let r = 0; r < 3; r++) {
+            for (let c = 0; c < 3; c++) {
+                const currentRow = boxRow + r;
+                const currentCol = boxCol + c;
+                if ((currentRow !== row || currentCol !== col) && grid[currentRow][currentCol] === value) {
+                    cells.push({ row: currentRow, col: currentCol });
+                }
+            }
+        }
+        
+        return cells;
     }
 
-    getRegionType(row, col, value) {
-        // Determine which region (row, column, or box) has only one possible position for this value
-        return 'region'; // Placeholder - implement actual logic
+    getRowCells(row, excludeCol) {
+        return Array.from({ length: 9 }, (_, col) => 
+            col !== excludeCol ? { row, col } : null
+        ).filter(cell => cell !== null);
     }
 
-    isGridComplete(grid) {
-        return !grid.some(row => row.includes(0));
+    getColumnCells(excludeRow, col) {
+        return Array.from({ length: 9 }, (_, row) => 
+            row !== excludeRow ? { row, col } : null
+        ).filter(cell => cell !== null);
+    }
+
+    getBoxCells(excludeRow, excludeCol) {
+        const cells = [];
+        const boxRow = Math.floor(excludeRow / 3) * 3;
+        const boxCol = Math.floor(excludeCol / 3) * 3;
+        
+        for (let r = 0; r < 3; r++) {
+            for (let c = 0; c < 3; c++) {
+                const row = boxRow + r;
+                const col = boxCol + c;
+                if (row !== excludeRow || col !== excludeCol) {
+                    cells.push({ row, col });
+                }
+            }
+        }
+        
+        return cells;
+    }
+
+    isPointingCombination(grid, row, col, value) {
+        const boxRow = Math.floor(row / 3) * 3;
+        const boxCol = Math.floor(col / 3) * 3;
+        let rowCount = 0;
+        let colCount = 0;
+        let boxCount = 0;
+
+        // Count possible positions in the box
+        for (let r = 0; r < 3; r++) {
+            for (let c = 0; c < 3; c++) {
+                const currentRow = boxRow + r;
+                const currentCol = boxCol + c;
+                if (grid[currentRow][currentCol].value === 0 &&
+                    this.isValidPlacement(grid, currentRow, currentCol, value)) {
+                    boxCount++;
+                    if (currentRow === row) rowCount++;
+                    if (currentCol === col) colCount++;
+                }
+            }
+        }
+
+        // Check if this forms a pointing pair/triple
+        return (boxCount === 2 || boxCount === 3) && (rowCount === boxCount || colCount === boxCount);
+    }
+
+    isBoxLineReduction(grid, row, col, value) {
+        const boxRow = Math.floor(row / 3) * 3;
+        const boxCol = Math.floor(col / 3) * 3;
+        let inBoxCount = 0;
+        let inLineCount = 0;
+
+        // Count possible positions in the box
+        for (let r = 0; r < 3; r++) {
+            for (let c = 0; c < 3; c++) {
+                const currentRow = boxRow + r;
+                const currentCol = boxCol + c;
+                if (grid[currentRow][currentCol].value === 0 &&
+                    this.isValidPlacement(grid, currentRow, currentCol, value)) {
+                    inBoxCount++;
+                }
+            }
+        }
+
+        // Count possible positions in the row/column outside the box
+        for (let i = 0; i < 9; i++) {
+            if (Math.floor(i / 3) !== Math.floor(row / 3)) { // Different box
+                if (grid[i][col].value === 0 &&
+                    this.isValidPlacement(grid, i, col, value)) {
+                    inLineCount++;
+                }
+            }
+            if (Math.floor(i / 3) !== Math.floor(col / 3)) { // Different box
+                if (grid[row][i].value === 0 &&
+                    this.isValidPlacement(grid, row, i, value)) {
+                    inLineCount++;
+                }
+            }
+        }
+
+        return inBoxCount === 1 && inLineCount === 0;
+    }
+
+    getPointingCombinationCells(grid, row, col, value) {
+        return this.getRelatedCells(row, col);
+    }
+
+    getBoxLineCells(row, col) {
+        return this.getRelatedCells(row, col);
     }
 
     getNextSolutionStep() {
+        console.log('Getting next solution step, current step:', this.currentSolutionStep); // Debug log
         if (!this.solutionPath || this.currentSolutionStep >= this.solutionPath.length) {
+            console.log('No more steps available'); // Debug log
             return null;
         }
-        return this.solutionPath[this.currentSolutionStep++];
+        const step = this.solutionPath[this.currentSolutionStep];
+        this.currentSolutionStep++;
+        console.log('Returning step:', step); // Debug log
+        return step;
     }
 
     getPreviousSolutionStep() {
+        console.log('Getting previous solution step, current step:', this.currentSolutionStep); // Debug log
         if (!this.solutionPath || this.currentSolutionStep <= 1) {
+            console.log('No previous steps available'); // Debug log
             return null;
         }
         this.currentSolutionStep -= 2;
-        return this.solutionPath[this.currentSolutionStep++];
+        const step = this.solutionPath[this.currentSolutionStep];
+        this.currentSolutionStep++;
+        console.log('Returning step:', step); // Debug log
+        return step;
     }
 
     applySolutionStep(step) {
@@ -643,20 +962,54 @@ class SudokuGame {
         );
         this.solution = null;
         this.selectedCell = null;
+        this.allSolutionSteps = []; // Reset solution steps
     }
 
     setCreationCell(row, col, value) {
         if (!this.isCreating) return false;
         if (value < 0 || value > 9) return false;
         
+        // Validate the move if it's not an erasure
+        if (value !== 0 && !this.isValidPlacement(this.grid, row, col, value)) {
+            console.log('Invalid placement in creation mode');
+            return false;
+        }
+        
         // Update the cell value
         this.grid[row][col] = {
             value: value,
-            isFixed: false,
+            isFixed: value !== 0, // Mark non-zero values as fixed
             notes: new Set()
         };
         
         return true;
+    }
+
+    validateCustomPuzzle() {
+        // First check for conflicts
+        if (this.findConflicts().length > 0) {
+            return false;
+        }
+
+        // Convert grid to simple array for validation
+        const puzzleArray = this.grid.map(row => 
+            row.map(cell => ({
+                value: cell.value,
+                isFixed: cell.isFixed,
+                notes: new Set()
+            }))
+        );
+        
+        // Check if puzzle has at least 17 clues (minimum for unique solution)
+        const cluesCount = puzzleArray.flat().filter(cell => cell.value !== 0).length;
+        if (cluesCount < 17) {
+            return false;
+        }
+
+        // Check for unique solution
+        const solutions = [];
+        this.solveSudoku(puzzleArray, solutions, 2);
+        return solutions.length === 1;
     }
 
     findConflicts() {
@@ -720,27 +1073,6 @@ class SudokuGame {
         return Array.from(conflicts).map(c => JSON.parse(c));
     }
 
-    validateCustomPuzzle() {
-        // First check for conflicts
-        if (this.findConflicts().length > 0) {
-            return false;
-        }
-
-        // Convert grid to simple array for validation
-        const puzzleArray = this.grid.map(row => row.map(cell => cell.value));
-        
-        // Check if puzzle has at least 17 clues (minimum for unique solution)
-        const cluesCount = puzzleArray.flat().filter(val => val !== 0).length;
-        if (cluesCount < 17) {
-            return false;
-        }
-
-        // Check for unique solution
-        const solutions = [];
-        this.solveSudoku(puzzleArray, solutions, 2);
-        return solutions.length === 1;
-    }
-
     finalizeCustomPuzzle() {
         if (!this.isCreating) return false;
 
@@ -754,7 +1086,13 @@ class SudokuGame {
         );
 
         // Find the solution
-        const puzzleValues = this.grid.map(row => row.map(cell => cell.value));
+        const puzzleValues = this.grid.map(row => 
+            row.map(cell => ({
+                value: cell.value,
+                isFixed: cell.isFixed,
+                notes: new Set()
+            }))
+        );
         const solutions = [];
         this.solveSudoku(puzzleValues, solutions, 1);
         
@@ -774,6 +1112,7 @@ class SudokuGame {
             this.checkCount = 0;
             this.undoStack = [];
             this.redoStack = [];
+            this.allSolutionSteps = [];
             
             // Reset and start timer
             this.stopTimer();
@@ -791,16 +1130,20 @@ class SudokuGame {
         
         const empty = this.findEmptyCell(puzzle);
         if (!empty) {
-            solutions.push(JSON.parse(JSON.stringify(puzzle)));
+            // Create a deep copy of the solution
+            const solution = puzzle.map(row => 
+                row.map(cell => cell.value)
+            );
+            solutions.push(solution);
             return;
         }
 
         const [row, col] = empty;
         for (let num = 1; num <= 9; num++) {
             if (this.isValidPlacement(puzzle, row, col, num)) {
-                puzzle[row][col] = num;
+                puzzle[row][col].value = num;
                 this.solveSudoku(puzzle, solutions, limit);
-                puzzle[row][col] = 0;
+                puzzle[row][col].value = 0;
             }
         }
     }
@@ -808,7 +1151,7 @@ class SudokuGame {
     findEmptyCell(puzzle) {
         for (let row = 0; row < 9; row++) {
             for (let col = 0; col < 9; col++) {
-                if (puzzle[row][col] === 0) {
+                if (puzzle[row][col].value === 0) {
                     return [row, col];
                 }
             }
@@ -816,25 +1159,32 @@ class SudokuGame {
         return null;
     }
 
-    isValidPlacement(puzzle, row, col, num) {
+    isValidPlacement(grid, row, col, value) {
         // Check row
-        for (let x = 0; x < 9; x++) {
-            if (x !== col && puzzle[row][x] === num) return false;
+        for (let c = 0; c < 9; c++) {
+            if (c !== col && grid[row][c].value === value) {
+                return false;
+            }
         }
 
         // Check column
-        for (let x = 0; x < 9; x++) {
-            if (x !== row && puzzle[x][col] === num) return false;
+        for (let r = 0; r < 9; r++) {
+            if (r !== row && grid[r][col].value === value) {
+                return false;
+            }
         }
 
         // Check 3x3 box
         const boxRow = Math.floor(row / 3) * 3;
         const boxCol = Math.floor(col / 3) * 3;
-        for (let i = 0; i < 3; i++) {
-            for (let j = 0; j < 3; j++) {
-                const r = boxRow + i;
-                const c = boxCol + j;
-                if (r !== row && c !== col && puzzle[r][c] === num) return false;
+        for (let r = 0; r < 3; r++) {
+            for (let c = 0; c < 3; c++) {
+                const currentRow = boxRow + r;
+                const currentCol = boxCol + c;
+                if ((currentRow !== row || currentCol !== col) && 
+                    grid[currentRow][currentCol].value === value) {
+                    return false;
+                }
             }
         }
 

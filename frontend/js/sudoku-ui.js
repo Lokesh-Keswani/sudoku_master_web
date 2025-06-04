@@ -4,17 +4,20 @@ class SudokuUI {
         this.gridElement = document.getElementById('sudoku-grid');
         this.timeElement = document.getElementById('time');
         this.messageElement = document.getElementById('message');
+        this.documentGenerator = new DocumentGenerator(game);
 
         this.setupEventListeners();
         this.setupTimerUpdate();
+        this.setupDownloadButton();
         this.render();
     }
 
     setupEventListeners() {
         // Game control buttons
         this.setupNewGameButton();
+        this.setupCreatePuzzleButton();
         this.setupHintButton();
-        this.setupCheckSolutionButton();
+        this.setupCheckButton();
         this.setupNotesButton();
         this.setupEraseButton();
         this.setupUndoRedoButtons();
@@ -28,6 +31,40 @@ class SudokuUI {
                 this.render();
                 this.showMessage(`New ${difficulty} game started!`);
             });
+        });
+    }
+
+    setupCreatePuzzleButton() {
+        const createButton = document.getElementById('create-puzzle');
+        const startGameButton = document.getElementById('start-game');
+        
+        createButton.addEventListener('click', () => {
+            this.isCreationMode = true;
+            this.game.startPuzzleCreation();
+            this.disableGameControls();
+            // Enable number pad in creation mode
+            document.querySelectorAll('.number').forEach(btn => btn.disabled = false);
+            createButton.style.display = 'none';
+            startGameButton.style.display = 'block';
+            this.render();
+            this.showMessage('Creation mode: Enter your puzzle (minimum 17 numbers needed)');
+        });
+
+        startGameButton.addEventListener('click', () => {
+            if (this.game.validateCustomPuzzle()) {
+                if (this.game.finalizeCustomPuzzle()) {
+                    this.isCreationMode = false;
+                    createButton.style.display = 'block';
+                    startGameButton.style.display = 'none';
+                    this.enableGameControls();
+                    this.render();
+                    this.showMessage('Custom puzzle started! Good luck!');
+                } else {
+                    this.showMessage('Error: Failed to create puzzle. Please try again.');
+                }
+            } else {
+                this.showMessage('Invalid puzzle! Need at least 17 numbers and a unique solution.');
+            }
         });
     }
 
@@ -45,17 +82,31 @@ class SudokuUI {
         });
     }
 
-    setupCheckSolutionButton() {
-        document.getElementById('check').addEventListener('click', async () => {
+    setupCheckButton() {
+        console.log('Setting up check button...'); // Debug log
+        const checkButton = document.getElementById('check');
+        if (checkButton) {
+            console.log('Check button found'); // Debug log
+            checkButton.addEventListener('click', async () => {
+                console.log('Check button clicked'); // Debug log
             const result = await this.game.checkSolution();
+                console.log('Check result:', result); // Debug log
+                
             if (result.solved) {
                 this.showMessage('Congratulations! Puzzle solved!');
-            } else if (result.showSolution) {
+                    this.timeElement.textContent = this.game.getFormattedTime();
+                    this.disableGameControls();
+                    this.showDownloadButton();
+                } else if (result.showSolution && result.solutionPath) {
                 this.showSolutionPanel(result.solutionPath);
+                    this.showMessage('Here is the step-by-step solution');
             } else {
-                this.showMessage('Not quite right yet. Click check again to see solution.');
+                    this.showMessage('Keep trying! Click check again to see the solution.');
             }
         });
+        } else {
+            console.error('Check button not found in DOM'); // Debug log
+        }
     }
 
     setupNotesButton() {
@@ -118,7 +169,57 @@ class SudokuUI {
         }, 1000);
     }
 
+    setupDownloadButton() {
+        // Remove any existing download button
+        const existingButton = document.getElementById('download-solution');
+        if (existingButton) {
+            existingButton.remove();
+        }
+
+        // Create new download button
+        const downloadButton = document.createElement('button');
+        downloadButton.id = 'download-solution';
+        downloadButton.className = 'download-button';
+        downloadButton.textContent = 'Download Full Solution Doc';
+        downloadButton.style.display = 'none';
+
+        // Find the controls container
+        const controlsContainer = document.querySelector('header .controls');
+        if (controlsContainer) {
+            // Insert before the timer span
+            const timerSpan = document.getElementById('time');
+            if (timerSpan) {
+                controlsContainer.insertBefore(downloadButton, timerSpan);
+            } else {
+                controlsContainer.appendChild(downloadButton);
+            }
+        }
+
+        // Add click event listener
+        downloadButton.addEventListener('click', async () => {
+            try {
+                await this.documentGenerator.generateSolutionDocument();
+                this.showMessage('Solution document downloaded successfully!');
+            } catch (error) {
+                console.error('Error generating document:', error);
+                this.showMessage('Error generating solution document');
+            }
+        });
+    }
+
+    showDownloadButton() {
+        console.log('Showing download button...'); // Debug log
+        const downloadButton = document.getElementById('download-solution');
+        if (downloadButton) {
+            downloadButton.style.display = 'inline-block';
+            console.log('Download button display set to:', downloadButton.style.display); // Debug log
+        } else {
+            console.log('Download button not found in DOM'); // Debug log
+        }
+    }
+
     render() {
+        console.log('Rendering grid...'); // Debug log
         this.gridElement.innerHTML = '';
 
         for (let row = 0; row < 9; row++) {
@@ -134,10 +235,44 @@ class SudokuUI {
     createCell(row, col) {
         const cell = document.createElement('div');
         cell.className = 'cell';
+        cell.dataset.row = row;
+        cell.dataset.col = col;
 
-        this.applyCellBorders(cell, row, col);
-        this.populateCellContent(cell, row, col);
-        this.setupCellClickHandler(cell, row, col);
+        const cellData = this.game.grid[row][col];
+        
+        // Apply cell borders
+        if (row % 3 === 0) cell.style.borderTop = '2px solid var(--grid-line-color)';
+        if (col % 3 === 0) cell.style.borderLeft = '2px solid var(--grid-line-color)';
+
+        // Handle creation mode differently
+        if (this.isCreationMode) {
+            this.setupCreationModeCell(cell, row, col);
+            if (cellData && cellData.value !== 0) {
+                cell.textContent = cellData.value;
+            }
+        } else {
+            // Regular game mode
+            if (cellData) {
+                if (cellData.isFixed) {
+                    cell.classList.add('fixed');
+                }
+                if (cellData.value !== 0) {
+                    cell.textContent = cellData.value;
+                }
+                if (cellData.notes && cellData.notes.size > 0) {
+                    const notesElement = this.createNotesElement(cellData.notes);
+                    cell.appendChild(notesElement);
+                }
+            }
+
+            // Add click handler for regular mode
+            cell.addEventListener('click', () => {
+                this.clearSelection();
+                this.game.selectCell(row, col);
+                cell.classList.add('selected');
+                this.highlightRelatedCells(row, col);
+            });
+        }
 
         return cell;
     }
@@ -220,14 +355,21 @@ class SudokuUI {
     }
 
     showMessage(text, duration = 3000) {
+        console.log('Showing message:', text); // Debug log
+        if (this.messageElement) {
         this.messageElement.textContent = text;
         this.messageElement.classList.add('show');
         setTimeout(() => {
             this.messageElement.classList.remove('show');
         }, duration);
+        } else {
+            console.error('Message element not found'); // Debug log
+        }
     }
 
     showSolutionPanel(solutionPath) {
+        console.log('Showing solution panel with path:', solutionPath); // Debug log
+        
         // Remove existing solution panel if any
         const existingPanel = document.querySelector('.solution-panel');
         if (existingPanel) {
@@ -307,6 +449,10 @@ class SudokuUI {
         
         document.querySelector('.game-container').appendChild(panel);
         
+        // Store the solution path in the game
+        this.game.solutionPath = solutionPath;
+        this.game.currentSolutionStep = 0;
+        
         // Show the first step
         const firstStep = this.game.getNextSolutionStep();
         if (firstStep) {
@@ -315,6 +461,9 @@ class SudokuUI {
     }
 
     showSolutionStep(step) {
+        console.log('Showing solution step:', step); // Debug log
+
+        // Update the step info display
         const stepInfo = document.querySelector('.step-info');
         if (stepInfo) {
             stepInfo.innerHTML = `
@@ -327,15 +476,118 @@ class SudokuUI {
             `;
         }
 
-        // Apply the move
-        this.game.applySolutionStep(step);
+        // Apply the move to the game grid
+        this.game.grid[step.row][step.col] = {
+            value: step.value,
+            isFixed: false,
+            notes: new Set()
+        };
+
+        // Re-render the entire grid
         this.render();
 
-        // Highlight the cell
-        this.clearHighlights();
-        const cell = document.querySelector(`.cell[data-row="${step.row}"][data-col="${step.col}"]`);
+        // Highlight the affected cell
+        const cells = document.querySelectorAll('.cell');
+        const cellIndex = step.row * 9 + step.col;
+        const cell = cells[cellIndex];
         if (cell) {
+            // Remove previous highlights
+            cells.forEach(c => c.classList.remove('solution-highlight'));
+            // Add highlight to current cell
             cell.classList.add('solution-highlight');
         }
+
+        // Highlight related cells if available
+        if (step.patternCells) {
+            step.patternCells.forEach(({row, col}) => {
+                const relatedCellIndex = row * 9 + col;
+                const relatedCell = cells[relatedCellIndex];
+                if (relatedCell) {
+                    relatedCell.classList.add('highlighted');
+                }
+            });
+        }
+    }
+
+    disableGameControls() {
+        document.getElementById('hint').disabled = true;
+        document.getElementById('check').disabled = true;
+        document.getElementById('notes-mode').disabled = true;
+        document.getElementById('erase').disabled = true;
+        document.getElementById('undo').disabled = true;
+        document.getElementById('redo').disabled = true;
+    }
+
+    enableGameControls() {
+        document.getElementById('hint').disabled = false;
+        document.getElementById('check').disabled = false;
+        document.getElementById('notes-mode').disabled = false;
+        document.getElementById('erase').disabled = false;
+        document.getElementById('undo').disabled = false;
+        document.getElementById('redo').disabled = false;
+    }
+
+    setupCreationModeCell(cell, row, col) {
+        cell.classList.add('editable');
+        cell.tabIndex = 0; // Make cell focusable
+        
+        // Handle keyboard input
+        cell.addEventListener('keydown', (e) => {
+            e.preventDefault();
+            const key = e.key;
+            if (/^[1-9]$/.test(key)) {
+                if (this.game.setCreationCell(row, col, parseInt(key))) {
+                    cell.textContent = key;
+                } else {
+                    this.showMessage('Invalid placement! Number conflicts with existing values.');
+                }
+            } else if (key === 'Backspace' || key === 'Delete' || key === '0') {
+                this.game.setCreationCell(row, col, 0);
+                cell.textContent = '';
+            }
+        });
+
+        // Handle click for selection in creation mode
+        cell.addEventListener('click', () => {
+            this.clearSelection();
+            cell.classList.add('selected');
+            cell.focus(); // Focus the cell when clicked
+        });
+
+        // Handle number pad clicks in creation mode
+        const handleNumberInput = (value) => {
+            if (cell.classList.contains('selected')) {
+                if (value === 0) {
+                    this.game.setCreationCell(row, col, 0);
+                    cell.textContent = '';
+                } else if (this.game.setCreationCell(row, col, value)) {
+                    cell.textContent = value;
+                } else {
+                    this.showMessage('Invalid placement! Number conflicts with existing values.');
+                }
+            }
+        };
+
+        // Add number pad event listeners if they don't exist
+        if (!this.numberPadInitialized) {
+            document.querySelectorAll('.number').forEach(button => {
+                button.addEventListener('click', () => {
+                    if (this.isCreationMode) {
+                        const value = parseInt(button.dataset.number);
+                        const selectedCell = document.querySelector('.cell.selected');
+                        if (selectedCell) {
+                            const row = parseInt(selectedCell.dataset.row);
+                            const col = parseInt(selectedCell.dataset.col);
+                            handleNumberInput(value);
+                        }
+                    }
+                });
+            });
+            this.numberPadInitialized = true;
+        }
+    }
+
+    clearHighlights() {
+        // Implement the logic to clear highlights
     }
 }

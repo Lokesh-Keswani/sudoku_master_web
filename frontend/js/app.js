@@ -1,4 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
+    // Initialize game and UI
     const game = new SudokuGame();
     const ui = new SudokuUI(game);
     
@@ -15,6 +16,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 game.makeMove(parseInt(key)).then(valid => {
                     if (valid) {
                         ui.render();
+                        // Check if puzzle is solved after each valid move
+                        game.checkSolution().then(result => {
+                            if (result.solved) {
+                                ui.showMessage('Congratulations! Puzzle solved!');
+                                ui.showDownloadButton();
+                            }
+                        });
                     }
                 });
             } else if (key === 'Backspace' || key === 'Delete') {
