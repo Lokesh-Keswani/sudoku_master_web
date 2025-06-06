@@ -4,12 +4,29 @@ class SudokuUI {
         this.gridElement = document.getElementById('sudoku-grid');
         this.timeElement = document.getElementById('time');
         this.messageElement = document.getElementById('message');
+        this.timerElement = document.getElementById('timer');
         this.documentGenerator = new DocumentGenerator(game);
-
+        this.selectedCell = null;
+        
+        // Get UI elements
+        this.generateDocButton = document.getElementById('generate-doc-button');
+        
+        // Set up event listeners
+        if (this.generateDocButton) {
+            this.generateDocButton.addEventListener('click', () => {
+                this.documentGenerator.generateSolutionDocument();
+            });
+        }
+        
         this.setupEventListeners();
-        this.setupTimerUpdate();
-        this.setupDownloadButton();
-        this.render();
+        this.updateUI();
+        
+        // Start timer update interval
+        setInterval(() => {
+            if (this.timerElement && !this.game.isCreating) {
+                this.timerElement.textContent = this.game.getFormattedTime();
+            }
+        }, 1000);
     }
 
     setupEventListeners() {
@@ -22,6 +39,34 @@ class SudokuUI {
         this.setupEraseButton();
         this.setupUndoRedoButtons();
         this.setupNumberPad();
+
+        const validateButton = document.getElementById('validate-button');
+        
+        // Hide generate doc button initially
+        if (this.generateDocButton) {
+            this.generateDocButton.style.display = 'none';
+        }
+
+        validateButton.addEventListener('click', () => {
+            if (!this.game.isCreating) return;
+            
+            const validationResult = this.game.validateCustomPuzzle();
+            this.showMessage(validationResult.message);
+            
+            if (validationResult.isValid) {
+                if (this.game.finalizeCustomPuzzle()) {
+                    validateButton.textContent = 'Validate Puzzle';
+                    this.showMessage('Puzzle created successfully! You can now start playing.');
+                    
+                    // Show generate doc button after successful puzzle creation
+                    if (this.generateDocButton) {
+                        this.generateDocButton.style.display = 'block';
+                    }
+                    
+                    this.updateUI();
+                }
+            }
+        });
     }
 
     setupNewGameButton() {
@@ -47,7 +92,7 @@ class SudokuUI {
             createButton.style.display = 'none';
             startGameButton.style.display = 'block';
             this.render();
-            this.showMessage('Creation mode: Enter your puzzle (minimum 17 numbers needed)');
+            this.showMessage('Creation mode: Enter your puzzle numbers');
         });
 
         startGameButton.addEventListener('click', () => {
@@ -63,7 +108,7 @@ class SudokuUI {
                     this.showMessage('Error: Failed to create puzzle. Please try again.');
                 }
             } else {
-                this.showMessage('Invalid puzzle! Need at least 17 numbers and a unique solution.');
+                this.showMessage('Invalid puzzle! The puzzle must have a unique solution.');
             }
         });
     }
@@ -170,48 +215,21 @@ class SudokuUI {
     }
 
     setupDownloadButton() {
-        // Remove any existing download button
-        const existingButton = document.getElementById('download-solution');
-        if (existingButton) {
-            existingButton.remove();
+        console.log('Showing download button...'); // Debug log
+        const downloadButton = document.getElementById('generate-doc-button');
+        if (downloadButton) {
+            downloadButton.style.display = 'block';
+            console.log('Download button display set to:', downloadButton.style.display); // Debug log
+        } else {
+            console.log('Download button not found in DOM'); // Debug log
         }
-
-        // Create new download button
-        const downloadButton = document.createElement('button');
-        downloadButton.id = 'download-solution';
-        downloadButton.className = 'download-button';
-        downloadButton.textContent = 'Download Full Solution Doc';
-        downloadButton.style.display = 'none';
-
-        // Find the controls container
-        const controlsContainer = document.querySelector('header .controls');
-        if (controlsContainer) {
-            // Insert before the timer span
-            const timerSpan = document.getElementById('time');
-            if (timerSpan) {
-                controlsContainer.insertBefore(downloadButton, timerSpan);
-            } else {
-                controlsContainer.appendChild(downloadButton);
-            }
-        }
-
-        // Add click event listener
-        downloadButton.addEventListener('click', async () => {
-            try {
-                await this.documentGenerator.generateSolutionDocument();
-                this.showMessage('Solution document downloaded successfully!');
-            } catch (error) {
-                console.error('Error generating document:', error);
-                this.showMessage('Error generating solution document');
-            }
-        });
     }
 
     showDownloadButton() {
         console.log('Showing download button...'); // Debug log
-        const downloadButton = document.getElementById('download-solution');
+        const downloadButton = document.getElementById('generate-doc-button');
         if (downloadButton) {
-            downloadButton.style.display = 'inline-block';
+            downloadButton.style.display = 'block';
             console.log('Download button display set to:', downloadButton.style.display); // Debug log
         } else {
             console.log('Download button not found in DOM'); // Debug log
@@ -406,7 +424,71 @@ class SudokuUI {
         autoPlayButton.className = 'solution-auto-button';
         
         let autoPlayInterval = null;
+        let currentStepIndex = -1;
         
+        const showStep = (step) => {
+            if (step) {
+                console.log('Showing step:', step); // Debug log
+                
+                // Get the technique and difficulty, with fallbacks
+                const technique = step.technique || step.strategy || 'Logical Deduction';
+                const difficulty = step.difficulty || 'Basic';
+                const reason = step.reason || 'Move made based on logical deduction';
+                
+                // Format the technique name
+                const formattedTechnique = technique.split('_')
+                    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                    .join(' ');
+                
+                // Add difficulty class for styling
+                const difficultyClass = difficulty.toLowerCase().replace(/\s+/g, '-');
+                
+                stepInfo.innerHTML = `
+                    <div class="step-header">
+                        <span class="strategy-badge ${difficultyClass}">${formattedTechnique}</span>
+                        <span class="difficulty-badge ${difficultyClass}">${difficulty}</span>
+                    </div>
+                    <p class="step-location">Row ${step.row + 1}, Column ${step.col + 1}: Place ${step.value}</p>
+                    <p class="step-reason">${reason}</p>
+                `;
+
+                // Apply the move to the game grid
+                this.game.grid[step.row][step.col] = {
+                    value: step.value,
+                    isFixed: false,
+                    notes: new Set()
+                };
+
+                // Re-render the entire grid
+                this.render();
+
+                // Highlight the affected cell
+                const cells = document.querySelectorAll('.cell');
+                const cellIndex = step.row * 9 + step.col;
+                const cell = cells[cellIndex];
+                if (cell) {
+                    // Remove previous highlights
+                    cells.forEach(c => c.classList.remove('solution-highlight'));
+                    // Add highlight to current cell
+                    cell.classList.add('solution-highlight');
+                }
+            }
+        };
+
+        // Previous button click handler
+        prevButton.addEventListener('click', () => {
+            if (currentStepIndex > 0) {
+                currentStepIndex--;
+                showStep(solutionPath[currentStepIndex]);
+            }
+            if (autoPlayInterval) {
+                clearInterval(autoPlayInterval);
+                autoPlayInterval = null;
+                autoPlayButton.textContent = 'Auto Play';
+            }
+        });
+
+        // Auto play button click handler
         autoPlayButton.addEventListener('click', () => {
             if (autoPlayInterval) {
                 clearInterval(autoPlayInterval);
@@ -415,28 +497,28 @@ class SudokuUI {
             } else {
                 autoPlayButton.textContent = 'Stop';
                 autoPlayInterval = setInterval(() => {
-                    const step = this.game.getNextSolutionStep();
-                    if (step) {
-                        this.showSolutionStep(step);
+                    if (currentStepIndex < solutionPath.length - 1) {
+                        currentStepIndex++;
+                        showStep(solutionPath[currentStepIndex]);
                     } else {
                         clearInterval(autoPlayInterval);
+                        autoPlayInterval = null;
                         autoPlayButton.textContent = 'Auto Play';
                     }
-                }, 2000); // Show a new step every 2 seconds
+                }, 1500);
             }
         });
 
-        prevButton.addEventListener('click', () => {
-            const step = this.game.getPreviousSolutionStep();
-            if (step) {
-                this.showSolutionStep(step);
-            }
-        });
-
+        // Next button click handler
         nextButton.addEventListener('click', () => {
-            const step = this.game.getNextSolutionStep();
-            if (step) {
-                this.showSolutionStep(step);
+            if (currentStepIndex < solutionPath.length - 1) {
+                currentStepIndex++;
+                showStep(solutionPath[currentStepIndex]);
+            }
+            if (autoPlayInterval) {
+                clearInterval(autoPlayInterval);
+                autoPlayInterval = null;
+                autoPlayButton.textContent = 'Auto Play';
             }
         });
 
@@ -449,63 +531,10 @@ class SudokuUI {
         
         document.querySelector('.game-container').appendChild(panel);
         
-        // Store the solution path in the game
-        this.game.solutionPath = solutionPath;
-        this.game.currentSolutionStep = 0;
-        
         // Show the first step
-        const firstStep = this.game.getNextSolutionStep();
-        if (firstStep) {
-            this.showSolutionStep(firstStep);
-        }
-    }
-
-    showSolutionStep(step) {
-        console.log('Showing solution step:', step); // Debug log
-
-        // Update the step info display
-        const stepInfo = document.querySelector('.step-info');
-        if (stepInfo) {
-            stepInfo.innerHTML = `
-                <div class="step-header">
-                    <span class="strategy-badge">${step.strategy}</span>
-                    <span class="difficulty-badge">Difficulty: ${step.difficulty}</span>
-                </div>
-                <p class="step-location">Row ${step.row + 1}, Column ${step.col + 1}: Place ${step.value}</p>
-                <p class="step-reason">${step.reason}</p>
-            `;
-        }
-
-        // Apply the move to the game grid
-        this.game.grid[step.row][step.col] = {
-            value: step.value,
-            isFixed: false,
-            notes: new Set()
-        };
-
-        // Re-render the entire grid
-        this.render();
-
-        // Highlight the affected cell
-        const cells = document.querySelectorAll('.cell');
-        const cellIndex = step.row * 9 + step.col;
-        const cell = cells[cellIndex];
-        if (cell) {
-            // Remove previous highlights
-            cells.forEach(c => c.classList.remove('solution-highlight'));
-            // Add highlight to current cell
-            cell.classList.add('solution-highlight');
-        }
-
-        // Highlight related cells if available
-        if (step.patternCells) {
-            step.patternCells.forEach(({row, col}) => {
-                const relatedCellIndex = row * 9 + col;
-                const relatedCell = cells[relatedCellIndex];
-                if (relatedCell) {
-                    relatedCell.classList.add('highlighted');
-                }
-            });
+        if (solutionPath && solutionPath.length > 0) {
+            currentStepIndex = 0;
+            showStep(solutionPath[currentStepIndex]);
         }
     }
 
@@ -589,5 +618,33 @@ class SudokuUI {
 
     clearHighlights() {
         // Implement the logic to clear highlights
+    }
+
+    updateUI() {
+        this.updateGrid();
+        this.updateDocumentButtonVisibility();
+        // Update other UI elements as needed
+    }
+
+    updateTimer(time) {
+        if (this.timerElement) {
+            this.timerElement.textContent = time;
+        }
+    }
+
+    updateDocumentButtonVisibility() {
+        const generateDocButton = document.getElementById('generate-doc-button');
+        if (generateDocButton) {
+            generateDocButton.style.display = this.game.isPlaying ? 'block' : 'none';
+        }
+    }
+
+    checkWin() {
+        if (this.game.checkWin()) {
+            this.showMessage('Congratulations! Puzzle solved!');
+            this.showDownloadButton();
+            return true;
+        }
+        return false;
     }
 }

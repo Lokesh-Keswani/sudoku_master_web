@@ -38,11 +38,17 @@ class DocumentGenerator {
         const moves = this.getActualMoves();
         const stats = this.generateStatistics(moves);
         
-        // Generate each section in the correct order
-        this.addHowToPlaySection(doc);                  // First page with how to play
-        await this.addStepByStepSolution(doc, moves);   // Steps with detailed analysis
-        this.addSolutionStatistics(doc, stats);         // Statistics before final puzzle
-        this.addFinalPuzzle(doc);                      // Final puzzle at the end
+        // 1. First page - How to Play
+        this.addHowToPlaySection(doc);
+
+        // 2. Step by Step Solution with summary
+        await this.addStepByStepSolution(doc, moves, stats);
+
+        // 3. Analysis page
+        this.addSolutionStatistics(doc, stats);
+
+        // 4. Final solved puzzle
+        this.addFinalPuzzle(doc);
         
         doc.save(`sudoku-solution-${this.formatDate()}.pdf`);
     }
@@ -142,338 +148,443 @@ class DocumentGenerator {
         return Array.from(related);
     }
 
-    getMoveDifficulty(move) {
-        if (move.technique === 'Logical Deduction') return 'Advanced';
-        if (move.technique === 'Hidden Single' || move.technique === 'Pointing Combination') return 'Intermediate';
-        return 'Basic';
+    getMoveTechnique(move) {
+        // If technique is already set and valid, use it
+        if (move.technique && typeof move.technique === 'string') {
+            return move.technique;
+        }
+
+        // If strategy is provided, use it
+        if (move.strategy && typeof move.strategy === 'string') {
+            return move.strategy;
+        }
+
+        // Analyze the move to determine the technique
+        const grid = this.getCurrentGridState(this.game.allSolutionSteps, move.sequence);
+        
+        // Check for Naked Single
+        if (this.isNakedSingle(move)) {
+            return 'Naked Single';
+        }
+        
+        // Check for Hidden Single
+        const hiddenSingleType = this.getHiddenSingleType(move, grid);
+        if (hiddenSingleType) {
+            return hiddenSingleType;
+        }
+        
+        // Check for Pointing Pair/Triple
+        if (this.isPointingCombination(move, grid)) {
+            return 'Pointing Combination';
+        }
+
+        // Check for Box/Line Reduction
+        if (this.isBoxLineReduction(move, grid)) {
+            return 'Box Line Reduction';
+        }
+
+        // Default to Logical Deduction if no specific technique is identified
+        return 'Logical Deduction';
     }
 
-    getMoveTechnique(move) {
-        if (move.strategy === 'Player Move') return 'Logical Deduction';
-        if (move.type === 'hint') return 'Hidden Single';
-        return 'Naked Single';
+    getHiddenSingleType(move, grid) {
+        const value = move.value;
+        const row = move.row;
+        const col = move.col;
+        
+        // Check row
+        let rowCount = 0;
+        for (let c = 0; c < 9; c++) {
+            if (c !== col && grid[row][c] === 0 && this.canPlaceValue(grid, row, c, value)) {
+                rowCount++;
+            }
+        }
+        if (rowCount === 0) return 'Hidden Single Row';
+
+        // Check column
+        let colCount = 0;
+        for (let r = 0; r < 9; r++) {
+            if (r !== row && grid[r][col] === 0 && this.canPlaceValue(grid, r, col, value)) {
+                colCount++;
+            }
+        }
+        if (colCount === 0) return 'Hidden Single Column';
+
+        // Check box
+        const boxRow = Math.floor(row / 3) * 3;
+        const boxCol = Math.floor(col / 3) * 3;
+        let boxCount = 0;
+        for (let r = 0; r < 3; r++) {
+            for (let c = 0; c < 3; c++) {
+                const currentRow = boxRow + r;
+                const currentCol = boxCol + c;
+                if ((currentRow !== row || currentCol !== col) && 
+                    grid[currentRow][currentCol] === 0 && 
+                    this.canPlaceValue(grid, currentRow, currentCol, value)) {
+                    boxCount++;
+                }
+            }
+        }
+        if (boxCount === 0) return 'Hidden Single Box';
+
+        return null;
+    }
+
+    isPointingCombination(move, grid) {
+        const value = move.value;
+        const boxRow = Math.floor(move.row / 3) * 3;
+        const boxCol = Math.floor(move.col / 3) * 3;
+        
+        // Count possible positions for value in the box
+        let positions = [];
+        for (let r = 0; r < 3; r++) {
+            for (let c = 0; c < 3; c++) {
+                const currentRow = boxRow + r;
+                const currentCol = boxCol + c;
+                if (grid[currentRow][currentCol] === 0 && 
+                    this.canPlaceValue(grid, currentRow, currentCol, value)) {
+                    positions.push({row: currentRow, col: currentCol});
+                }
+            }
+        }
+        
+        // Check if positions align in a row or column
+        if (positions.length === 2 || positions.length === 3) {
+            const sameRow = positions.every(pos => pos.row === positions[0].row);
+            const sameCol = positions.every(pos => pos.col === positions[0].col);
+            return sameRow || sameCol;
+        }
+        
+        return false;
+    }
+
+    isBoxLineReduction(move, grid) {
+        const value = move.value;
+        const row = move.row;
+        const col = move.col;
+        
+        // Check if value appears only in one box for the row
+        let rowBoxAppearances = new Set();
+        for (let c = 0; c < 9; c++) {
+            if (grid[row][c] === 0 && this.canPlaceValue(grid, row, c, value)) {
+                rowBoxAppearances.add(Math.floor(c / 3));
+            }
+        }
+        if (rowBoxAppearances.size === 1) return true;
+        
+        // Check if value appears only in one box for the column
+        let colBoxAppearances = new Set();
+        for (let r = 0; r < 9; r++) {
+            if (grid[r][col] === 0 && this.canPlaceValue(grid, r, col, value)) {
+                colBoxAppearances.add(Math.floor(r / 3));
+            }
+        }
+        if (colBoxAppearances.size === 1) return true;
+        
+        return false;
+    }
+
+    canPlaceValue(grid, row, col, value) {
+        // Check row
+        for (let c = 0; c < 9; c++) {
+            if (grid[row][c] === value) return false;
+        }
+        
+        // Check column
+        for (let r = 0; r < 9; r++) {
+            if (grid[r][col] === value) return false;
+        }
+        
+        // Check box
+        const boxRow = Math.floor(row / 3) * 3;
+        const boxCol = Math.floor(col / 3) * 3;
+        for (let r = 0; r < 3; r++) {
+            for (let c = 0; c < 3; c++) {
+                if (grid[boxRow + r][boxCol + c] === value) return false;
+            }
+        }
+        
+        return true;
+    }
+
+    getMoveDifficulty(move) {
+        // If difficulty is already set and valid, use it
+        if (move.difficulty && typeof move.difficulty === 'string') {
+            return move.difficulty;
+        }
+        
+        // Determine difficulty based on technique
+        const technique = this.getMoveTechnique(move);
+        
+        switch(technique.toLowerCase()) {
+            case 'logical deduction':
+                return 'Advanced';
+            case 'hidden single':
+            case 'hidden single column':
+            case 'hidden single row':
+            case 'pointing combination':
+                return 'Intermediate';
+            case 'naked single':
+            default:
+        return 'Basic';
+        }
+    }
+
+    isNakedSingle(move) {
+        // Check if this is the only possible value for this cell
+        const possibilities = this.getPossibleValues(this.getCurrentGridState(this.game.allSolutionSteps, move.sequence), move.row, move.col);
+        return possibilities.size === 1;
     }
 
     generateStatistics(moves) {
         // Initialize counters
-        let totalValidSteps = 0;
         const stats = {
-            totalSteps: 0,
+            totalSteps: moves.length,
             difficulty: {
                 'Advanced': 0,
                 'Basic': 0,
                 'Intermediate': 0
             },
-            strategy: {
-                'Logical Deduction': 0,
-                'Naked Single': 0,
-                'Hidden Single Column': 0,
-                'Hidden Single Row': 0,
-                'Pointing Combination': 0
-            }
+            strategy: {}
         };
 
+        // Count each move
         moves.forEach(move => {
-            // Get the technique and normalize it
-            const technique = (move.technique || '').toLowerCase();
-            const difficulty = (move.difficulty || '').toLowerCase();
-            
-            // Only count valid moves
-            if (move.value && typeof move.row === 'number' && typeof move.col === 'number') {
-                // Count difficulty
-                if (difficulty.includes('advanced')) {
-                    stats.difficulty['Advanced']++;
-                } else if (difficulty.includes('intermediate')) {
-                    stats.difficulty['Intermediate']++;
-                } else {
-                    stats.difficulty['Basic']++;
-                }
-                
-                // Map the techniques to our categories
-                if (technique === 'naked_single') {
-                    stats.strategy['Naked Single']++;
-                    totalValidSteps++;
-                } else if (technique === 'hidden_single_column') {
-                    stats.strategy['Hidden Single Column']++;
-                    totalValidSteps++;
-                } else if (technique === 'hidden_single_row') {
-                    stats.strategy['Hidden Single Row']++;
-                    totalValidSteps++;
-                } else if (technique === 'pointing_combination') {
-                    stats.strategy['Pointing Combination']++;
-                    totalValidSteps++;
-                } else if (technique === 'logical_deduction' || technique === 'player_move') {
-                    stats.strategy['Logical Deduction']++;
-                    totalValidSteps++;
-                }
+            // Skip invalid moves
+            if (!move || typeof move.row === 'undefined' || typeof move.col === 'undefined' || !move.value) {
+                return;
             }
+            
+                // Count difficulty
+            const difficulty = move.difficulty || 'Basic';
+            stats.difficulty[difficulty] = (stats.difficulty[difficulty] || 0) + 1;
+            
+            // Count strategy/technique
+            const technique = this.normalizeTechniqueName(move.technique || 'Logical Deduction');
+            stats.strategy[technique] = (stats.strategy[technique] || 0) + 1;
         });
 
-        // Set the total steps
-        stats.totalSteps = totalValidSteps;
         return stats;
     }
 
     addHowToPlaySection(doc) {
         // Title
-        doc.setFontSize(18);
+        doc.setFontSize(14);
         doc.text('Sudoku Puzzle Solution', 20, 20);
 
         // Generation timestamp
-        doc.setFontSize(10);
-        doc.text(`Generated on ${this.formatDate()}`, 20, 30);
-
-        // Introduction
         doc.setFontSize(11);
-        doc.text('This document contains a step-by-step breakdown of the solved Sudoku puzzle, including', 20, 45);
-        doc.text('logic used, explanation for each move, and how Sudoku works.', 20, 52);
+        const timestamp = this.formatDate();
+        doc.text(`Generated on ${timestamp}`, 20, 35);
 
-        // How to Play Section
+        // Add horizontal line
+        doc.setLineWidth(0.5);
+        doc.line(20, 40, 190, 40);
+
+        // Description
+        doc.setFontSize(11);
+        doc.text('This document contains a step-by-step breakdown of the solved Sudoku puzzle, including', 20, 55);
+        doc.text('logic used, explanation for each move, and how Sudoku works.', 20, 65);
+
+        // How to Play Title
         doc.setFontSize(14);
-        doc.text('How to Play Sudoku', 20, 70);
+        doc.text('How to Play Sudoku', 20, 85);
 
         // Basic Rule
         doc.setFontSize(11);
-        doc.text('Basic Rule: Fill the 9×9 grid with numbers 1-9, ensuring each number appears exactly once', 20, 85);
-        doc.text('in every row, column, and 3×3 box.', 20, 92);
+        doc.text('Basic Rule: Fill the 9×9 grid with numbers 1-9, ensuring each number appears exactly once', 20, 105);
+        doc.text('in every row, column, and 3×3 box.', 20, 115);
 
-        // Solving Techniques Section
-        doc.text('Solving Techniques:', 20, 110);
+        // Solving Techniques Title
+        doc.text('Solving Techniques:', 20, 135);
 
         // 1. Basic Techniques
-        doc.setFontSize(12);
-        doc.text('1. Basic Techniques:', 20, 125);
-        doc.setFontSize(11);
-        const basicTechniques = [
-            '• Scanning: Check rows, columns, and boxes to find where a number can legally be placed',
-            '• Single Candidate (Naked Single): When only one number can go in a cell',
-            '• Hidden Singles: When a number can only go in one cell within a row, column, or box'
-        ];
-        let y = 135;
-        basicTechniques.forEach(technique => {
-            const lines = doc.splitTextToSize(technique, 170);
-            lines.forEach(line => {
-                doc.text(line, 20, y);
-                y += 7;
-            });
-        });
+        doc.text('1. Basic Techniques:', 20, 155);
+        doc.text('• Scanning: Check rows, columns, and boxes to find where a number can legally be placed', 30, 170);
+        doc.text('• Single Candidate (Naked Single): When only one number can go in a cell', 30, 185);
+        doc.text('• Hidden Singles: When a number can only go in one cell within a row, column, or box', 30, 200);
 
         // 2. Intermediate Techniques
-        doc.setFontSize(12);
-        doc.text('2. Intermediate Techniques:', 20, y + 5);
-        doc.setFontSize(11);
-        const intermediateTechniques = [
-            '• Pointing Pairs/Triples: When a number is restricted to 2-3 cells in a box, aligned in a',
-            '  row/column',
-            '• Box/Line Reduction: When a number in a row/column must be in a specific box',
-            '• Hidden Pairs: When two cells in a unit share the same two candidates exclusively',
-            '• Naked Pairs/Triples: When 2-3 cells contain the same 2-3 candidates only'
-        ];
-        y += 15;
-        intermediateTechniques.forEach(technique => {
-            const lines = doc.splitTextToSize(technique, 170);
-            lines.forEach(line => {
-                doc.text(line, 20, y);
-                y += 7;
-            });
-        });
+        doc.text('2. Intermediate Techniques:', 20, 220);
+        doc.text('• Pointing Pairs/Triples: When a number is restricted to 2-3 cells in a box, aligned in a', 30, 235);
+        doc.text('row/column', 30, 245);
+        doc.text('• Box/Line Reduction: When a number in a row/column must be in a specific box', 30, 260);
+        doc.text('• Hidden Pairs: When two cells in a unit share the same two candidates exclusively', 30, 275);
+        doc.text('• Naked Pairs/Triples: When 2-3 cells contain the same 2-3 candidates only', 30, 290);
 
         // 3. Advanced Techniques
-        doc.setFontSize(12);
-        doc.text('3. Advanced Techniques:', 20, y + 5);
-        doc.setFontSize(11);
-        const advancedTechniques = [
-            '• X-Wing: When a number appears in exactly two positions in two different rows/columns',
-            '• Swordfish: Similar to X-Wing but with three rows/columns',
-            '• XY-Wing: A pattern involving three cells with specific candidate relationships',
-            '• Remote Pairs: Chain of pairs that can help eliminate candidates'
-        ];
-        y += 15;
-        advancedTechniques.forEach(technique => {
-            const lines = doc.splitTextToSize(technique, 170);
-            lines.forEach(line => {
-                doc.text(line, 20, y);
-                y += 7;
-        });
-        });
-
-        // Add page break
-        doc.addPage();
+        doc.addPage(); // Start Advanced Techniques on new page to match image
+        doc.text('3. Advanced Techniques:', 20, 20);
+        doc.text('• X-Wing: When a number appears in exactly two positions in two different rows/columns', 30, 35);
+        doc.text('• Swordfish: Similar to X-Wing but with three rows/columns', 30, 50);
+        doc.text('• XY-Wing: A pattern involving three cells with specific candidate relationships', 30, 65);
+        doc.text('• Remote Pairs: Chain of pairs that can help eliminate candidates', 30, 80);
     }
 
-    async addStepByStepSolution(doc, moves) {
-        // Title for the section
-        doc.setFontSize(16);
+    async addStepByStepSolution(doc, moves, stats) {
+        // Add new page for solution summary
+        doc.addPage();
+
+        // Title
+        doc.setFontSize(18);
         doc.text('Step-by-Step Solution', 20, 20);
 
-        // Filter valid moves
-        const validMoves = moves.filter(move => {
-            const technique = (move.technique || '').toLowerCase();
-            return (
-                move.value && 
-                typeof move.row === 'number' && 
-                typeof move.col === 'number' &&
-                (
-                    technique === 'naked_single' ||
-                    technique === 'hidden_single_column' ||
-                    technique === 'hidden_single_row' ||
-                    technique === 'pointing_combination' ||
-                    technique === 'logical_deduction' ||
-                    technique === 'player_move'
-                )
-            );
+        // Generation timestamp
+         doc.setFontSize(11);
+        doc.text(`Generated on ${this.formatDate()}`, 20, 40);
+
+        // Solution Summary
+        doc.setFontSize(14);
+        doc.text('Solution Summary:', 20, 60);
+
+        // Description with proper spacing
+        doc.setFontSize(11);
+        doc.text('This document contains a step-by-step breakdown of the solved Sudoku puzzle, including', 20, 80);
+        doc.text('logic used, explanation for each move, and how Sudoku works.', 20, 95);
+
+        // Total Steps
+        doc.text(`Total Steps: ${moves.length}`, 20, 115);
+
+        // Techniques Used section
+        doc.setFontSize(14);
+        doc.text('Techniques Used:', 20, 135);
+
+        // Use the same strategy counts as in the statistics page
+        const sortedStrategies = Object.entries(stats.strategy)
+            .sort((a, b) => b[1] - a[1]);
+
+        // Display techniques with counts and percentages
+        doc.setFontSize(11);
+        let y = 155;
+        sortedStrategies.forEach(([strategy, count]) => {
+            const percent = Math.round((count / moves.length) * 100);
+            doc.text(`• ${strategy}: ${count} moves (${percent}%)`, 25, y);
+                y += 15;
         });
 
-        // Add each valid step on a new page
+        // Add page number
+        doc.setFontSize(10);
+        doc.text(`Page ${doc.internal.getNumberOfPages()}`, 105, 285, { align: 'center' });
+
+        // Filter valid moves and ensure they have proper difficulty and technique
+        const validMoves = moves.filter(move => {
+            if (!move || typeof move.row === 'undefined' || typeof move.col === 'undefined' || !move.value) {
+                return false;
+            }
+            
+            // Ensure each move has difficulty and technique
+            if (!move.difficulty) {
+                move.difficulty = this.getMoveDifficulty(move);
+            }
+            if (!move.technique) {
+                move.technique = this.getMoveTechnique(move);
+            }
+            
+            return true;
+        });
+
+        // Add each valid step
         for (let i = 0; i < validMoves.length; i++) {
             const move = validMoves[i];
-            
-            // Get move analysis from Gemini
-            const currentGrid = this.getCurrentGridState(moves, i);
-            const possibleMoves = this.getPossibleMoves(currentGrid);
-            const analysis = await this.generateMoveAnalysis(move, currentGrid, possibleMoves);
 
             // Start a new page for each step
-            if (i > 0) {
                 doc.addPage();
-            }
 
-            // Add page header
-            doc.setFontSize(18);
+            // Add step header
+            doc.setFontSize(14);
             doc.text(`Step ${i + 1}`, 20, 30);
 
-            let currentY = 45;  // Starting Y position
-            const marginX = 20;  // Left margin
-            const pageWidth = 170;  // Width of content area
-            const minBoxHeight = 50;  // Minimum height of boxes
-            const boxPadding = 15;  // Padding inside boxes
+            let currentY = 45;
+            const marginX = 20;
+            const pageWidth = 170;
+            const minBoxHeight = 50;
+            const boxPadding = 15;
+            const pageHeight = 270; // Maximum Y position before needing a new page
+            const headerHeight = 25; // Height needed for section header and spacing
 
             // Move Details section with box
             doc.setFillColor(245, 245, 245);
-            const moveDetailsHeight = 100;  // Fixed height for move details
+            const moveDetailsHeight = 100;
             doc.rect(marginX, currentY, pageWidth, moveDetailsHeight, 'F');
             doc.setDrawColor(200, 200, 200);
             doc.rect(marginX, currentY, pageWidth, moveDetailsHeight);
 
-            doc.setFontSize(14);
+            doc.setFontSize(12);
             doc.text('Move Details', marginX + 5, currentY + 15);
             doc.setFontSize(11);
             doc.text(`Location: Row ${move.row + 1}, Column ${move.col + 1} (Box ${Math.floor(move.row / 3) * 3 + Math.floor(move.col / 3) + 1})`, marginX + 10, currentY + 30);
             doc.text(`Value Placed: ${move.value}`, marginX + 10, currentY + 45);
-            doc.text(`Technique Used: ${this.formatTechniqueName(move.technique)}`, marginX + 10, currentY + 60);
+            doc.text(`Technique: ${move.technique}`, marginX + 10, currentY + 60);
+            doc.text(`Difficulty: ${move.difficulty}`, marginX + 10, currentY + 75);
 
-            // Draw 3x3 grid on the right side of move details
+            // Draw 3x3 grid visualization
             this.draw3x3Grid(doc, move, currentY + 20, 120);
 
-            currentY += moveDetailsHeight + 15;  // Update Y position with spacing
+            currentY += moveDetailsHeight + 15;
 
-            // Move Explanation section
-            const moveExplanationLines = doc.splitTextToSize(analysis.moveExplanation, pageWidth - 20);
-            const moveExplanationHeight = Math.max(minBoxHeight, (moveExplanationLines.length * 7) + boxPadding * 2);
-
-                    // Check if we need a new page
-            if (currentY + moveExplanationHeight > 270) {
-                        doc.addPage();
-                currentY = 20;
-            }
-
-            doc.setFillColor(245, 245, 245);
-            doc.rect(marginX, currentY, pageWidth, moveExplanationHeight, 'F');
-            doc.setDrawColor(200, 200, 200);
-            doc.rect(marginX, currentY, pageWidth, moveExplanationHeight);
-
+            // Function to add a section with proper page break handling
+            const addSection = (title, text, startY) => {
+                let y = startY;
+                
+                // Add section header
                     doc.setFontSize(14);
-            doc.text('Move Explanation', marginX + 5, currentY + 15);
+                doc.text(title, marginX, y);
+                y += 20;
+
+                // Calculate box dimensions
             doc.setFontSize(11);
-            moveExplanationLines.forEach((line, index) => {
-                doc.text(line, marginX + 5, currentY + 30 + (index * 7));
-            });
-
-            currentY += moveExplanationHeight + 15;
-
-            // Technique Details section
-            const techniqueLines = doc.splitTextToSize(analysis.techniqueExplanation, pageWidth - 20);
-            const techniqueHeight = Math.max(minBoxHeight, (techniqueLines.length * 7) + boxPadding * 2);
+                const textWidth = pageWidth - 40; // 20px padding on each side
+                const wrappedLines = doc.splitTextToSize(text, textWidth);
+                const lineHeight = 8;
+                const contentHeight = Math.max(minBoxHeight, wrappedLines.length * lineHeight + 30); // 15px padding top and bottom
 
             // Check if we need a new page
-            if (currentY + techniqueHeight > 270) {
+                if (y + contentHeight > pageHeight) {
                 doc.addPage();
-                currentY = 20;
-            }
-
-            doc.setFillColor(245, 245, 245);
-            doc.rect(marginX, currentY, pageWidth, techniqueHeight, 'F');
-            doc.setDrawColor(200, 200, 200);
-            doc.rect(marginX, currentY, pageWidth, techniqueHeight);
-
+                    y = 20;
+                    // Redraw header on new page
             doc.setFontSize(14);
-            doc.text('Technique Details', marginX + 5, currentY + 15);
-            doc.setFontSize(11);
-            techniqueLines.forEach((line, index) => {
-                doc.text(line, marginX + 5, currentY + 30 + (index * 7));
-            });
+                    doc.text(title, marginX, y);
+                    y += 20;
+                }
 
-            currentY += techniqueHeight + 15;
-
-            // Move Assessment section
-            const assessmentLines = doc.splitTextToSize(analysis.moveAssessment.explanation, pageWidth - 20);
-            let assessmentHeight = Math.max(minBoxHeight, (assessmentLines.length * 7) + boxPadding * 2);
-            
-            if (!analysis.moveAssessment.isOptimal && analysis.moveAssessment.betterMove) {
-                assessmentHeight += 60;  // Extra space for better move visualization
-            }
-
-            // Check if we need a new page
-            if (currentY + assessmentHeight > 270) {
-                doc.addPage();
-                currentY = 20;
-            }
-
+                // Draw box
             doc.setFillColor(245, 245, 245);
-            doc.rect(marginX, currentY, pageWidth, assessmentHeight, 'F');
+                doc.rect(marginX, y, pageWidth, contentHeight, 'F');
             doc.setDrawColor(200, 200, 200);
-            doc.rect(marginX, currentY, pageWidth, assessmentHeight);
+                doc.rect(marginX, y, pageWidth, contentHeight);
 
-            doc.setFontSize(14);
-            doc.text('Move Assessment', marginX + 5, currentY + 15);
+                // Add text
             doc.setFontSize(11);
-            assessmentLines.forEach((line, index) => {
-                doc.text(line, marginX + 5, currentY + 30 + (index * 7));
-            });
+                wrappedLines.forEach((line, index) => {
+                    doc.text(line, marginX + 20, y + 20 + (index * lineHeight));
+                });
 
-            if (!analysis.moveAssessment.isOptimal && analysis.moveAssessment.betterMove) {
-                const betterMove = analysis.moveAssessment.betterMove;
-                const betterMoveY = currentY + 30 + (assessmentLines.length * 7);
-                this.draw3x3Grid(doc, betterMove, betterMoveY, 120);
-            }
+                return y + contentHeight + 15;
+            };
 
-            currentY += assessmentHeight + 15;
+            // Get move analysis with proper technique identification
+            const currentGrid = this.getCurrentGridState(moves, i);
+            const possibleMoves = this.getPossibleMoves(currentGrid);
+            const analysis = await this.generateMoveAnalysis(move, currentGrid, possibleMoves);
 
-            // Related Cells section
-            const relatedCellsText = doc.splitTextToSize(`Related Cells: ${move.relatedCells.join(', ')}`, pageWidth - 20);
-            const relatedCellsHeight = Math.max(minBoxHeight, (relatedCellsText.length * 7) + boxPadding * 2);
+            // Add Move Explanation section
+            currentY = addSection(
+                'Move Explanation',
+                analysis.moveExplanation,
+                currentY
+            );
 
-            // Check if we need a new page
-            if (currentY + relatedCellsHeight > 270) {
-                doc.addPage();
-                currentY = 20;
-            }
+            // Add Technique Details section (only once)
+            currentY = addSection(
+                'Technique Details',
+                analysis.techniqueExplanation,
+                currentY
+            );
 
-            doc.setFillColor(245, 245, 245);
-            doc.rect(marginX, currentY, pageWidth, relatedCellsHeight, 'F');
-            doc.setDrawColor(200, 200, 200);
-            doc.rect(marginX, currentY, pageWidth, relatedCellsHeight);
-
-            doc.setFontSize(14);
-            doc.text('Related Cells', marginX + 5, currentY + 15);
-            doc.setFontSize(11);
-            relatedCellsText.forEach((line, index) => {
-                doc.text(line, marginX + 5, currentY + 30 + (index * 7));
-            });
-
-            // Add page number at the bottom
-            doc.setFontSize(10);
-            doc.text(`Page ${doc.internal.getNumberOfPages()}`, 105, 285, { align: 'center' });
+        // Add page number
+        doc.setFontSize(10);
+        doc.text(`Page ${doc.internal.getNumberOfPages()}`, 105, 285, { align: 'center' });
         }
     }
 
@@ -482,89 +593,48 @@ class DocumentGenerator {
         doc.addPage();
 
         // Title
-        doc.setFontSize(16);
-        doc.text('Solution Statistics', 20, 30);
+        doc.setFontSize(18);
+        doc.text('Solution Statistics', 20, 20);
 
-        // Difficulty Distribution section
+        // Difficulty Distribution
         doc.setFontSize(14);
-        doc.text('Difficulty Distribution:', 20, 50);
-        
-        let y = 70;
-        
-        // Format difficulty stats with proper counts and percentages
-        const difficulties = [
-            ['Advanced', stats.difficulty['Advanced']],
-            ['Intermediate', stats.difficulty['Intermediate']],
-            ['Basic', stats.difficulty['Basic']]
-        ];
+        doc.text('Difficulty Distribution:', 20, 40);
 
-        difficulties.forEach(([level, count]) => {
+        // Calculate total moves for percentages
+        const totalMoves = stats.totalSteps;
+        
+        // Display difficulty stats with counts and percentages
+        doc.setFontSize(11);
+        let y = 60;
+        
+        // Sort difficulties by level (Basic -> Intermediate -> Advanced)
+        const difficultyOrder = ['Basic', 'Intermediate', 'Advanced'];
+        difficultyOrder.forEach(level => {
+            const count = stats.difficulty[level] || 0;
             if (count > 0) {
-                const percentage = Math.round((count / stats.totalSteps) * 100);
-                doc.setFontSize(11);
-                doc.text(`• ${level}: ${count} moves (${percentage}%)`, 25, y);
+                const percent = Math.round((count / totalMoves) * 100);
+                doc.text(`• ${level}: ${count} moves (${percent}%)`, 25, y);
                 y += 15;
             }
         });
 
-        // Strategy Distribution section
+        // Strategy Distribution
         y += 10;
         doc.setFontSize(14);
         doc.text('Strategy Distribution:', 20, y);
         y += 20;
 
-        // Format strategy stats with counts
-        const strategies = [
-            ['Naked Single', stats.strategy['Naked Single']],
-            ['Hidden Single Column', stats.strategy['Hidden Single Column']],
-            ['Hidden Single Row', stats.strategy['Hidden Single Row']],
-            ['Pointing Combination', stats.strategy['Pointing Combination']],
-            ['Logical Deduction', stats.strategy['Logical Deduction']]
-        ];
+        // Sort strategies by usage (most used first)
+        const sortedStrategies = Object.entries(stats.strategy)
+            .sort((a, b) => b[1] - a[1]);
 
-        strategies.forEach(([strategy, count]) => {
-            if (count > 0) {
+        // Display strategies
                 doc.setFontSize(11);
-                doc.text(`• ${strategy}: ${count} times`, 25, y);
+        sortedStrategies.forEach(([strategy, count]) => {
+            const percent = Math.round((count / totalMoves) * 100);
+            doc.text(`• ${strategy}: ${count} moves (${percent}%)`, 25, y);
                 y += 15;
-            }
         });
-
-        // Add Technique Details section
-        y += 10;
-        doc.setFontSize(14);
-        doc.text('Technique Details', 20, y);
-        y += 20;
-
-        // Add technique explanations
-        doc.setFontSize(11);
-        const techniques = {
-            'Naked Single': 'A naked single occurs when a cell in the Sudoku grid has only one possible value that can be placed in it. This happens when all other numbers from 1 to 9 are already present in the same row, column, or 3x3 block as the cell in question. The remaining value is the only valid candidate for that cell.',
-            'Hidden Single': 'A hidden single occurs when a number can only be placed in one cell within a row, column, or box, even though that cell might have other possible values.',
-            'Pointing Combination': 'A pointing combination occurs when the possible positions for a number within a 3x3 box are restricted to a single row or column, eliminating that number as a possibility from other cells in the same row or column.',
-            'Logical Deduction': 'Using advanced logical reasoning to determine the correct number based on the relationships between different cells and existing patterns.'
-        };
-
-        Object.entries(techniques).forEach(([technique, explanation]) => {
-            const lines = doc.splitTextToSize(explanation, 170);
-            doc.text(lines, 25, y);
-            y += lines.length * 7 + 10;
-        });
-
-        // Add Move Assessment section if available
-        if (stats.moveAssessments && stats.moveAssessments.length > 0) {
-            y += 10;
-            doc.setFontSize(14);
-            doc.text('Move Assessment', 20, y);
-            y += 20;
-
-            doc.setFontSize(11);
-            stats.moveAssessments.forEach(assessment => {
-                const lines = doc.splitTextToSize(assessment, 170);
-                doc.text(lines, 25, y);
-                y += lines.length * 7 + 5;
-            });
-        }
 
         // Add page number
         doc.setFontSize(10);
@@ -705,14 +775,16 @@ class DocumentGenerator {
         }).replace(/[/:]/g, '-');
     }
 
-    formatTechniqueName(technique) {
+    normalizeTechniqueName(technique) {
         if (!technique) return 'Logical Deduction';
         
-        // Convert snake_case to Title Case
-        return technique.toLowerCase()
-            .split('_')
+        // Convert to title case and handle special cases
+        return technique
+            .toLowerCase()
+            .split(/[_\s]+/)
             .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-            .join(' ');
+            .join(' ')
+            .replace(/\s*\(.*?\)\s*/g, ''); // Remove any parenthetical text
     }
 
     getTechniqueExplanation(technique) {
@@ -737,222 +809,57 @@ class DocumentGenerator {
         }
     }
 
-    async generateMoveAnalysis(move, currentGrid, allPossibleMoves) {
-        try {
-            console.log('Generating analysis for move:', move);
-            
-            // Create a more concise prompt for Flash model
-            const prompt = `Analyze this Sudoku move:
-Move: Value ${move.value} at Row ${move.row + 1}, Column ${move.col + 1}
-Technique: ${move.technique}
-Grid: ${JSON.stringify(currentGrid)}
-Available: ${JSON.stringify(allPossibleMoves)}
-
-Provide JSON with:
-{
-    "moveExplanation": "why this move was made",
-    "techniqueExplanation": "how the technique works",
-    "moveAssessment": {
-        "isOptimal": boolean,
-        "explanation": "assessment of move quality",
-        "betterMove": null or {"value": n, "row": n, "col": n, "reason": "why better"}
-    }
-}`;
-
-            // Add retry logic for API calls
-            let retries = 3;
-            let analysisText = null;
-            let error = null;
-
-            while (retries > 0) {
-                try {
-                    analysisText = await this.callGeminiAPI(prompt);
-                    break;
-                } catch (e) {
-                    error = e;
-                    console.error('API call attempt failed:', e);
-                    retries--;
-                    if (retries > 0) {
-                        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second between retries
-                    }
-                }
-            }
-
-            if (!analysisText) {
-                console.error('All API attempts failed:', error);
-                return this.generateFallbackAnalysis(move, currentGrid, allPossibleMoves);
-            }
-
-            try {
-                // Clean up the response text
-                analysisText = analysisText.replace(/```json\n|\n```/g, '').trim();
-                const analysis = JSON.parse(analysisText);
+    async generateMoveAnalysis(move, currentGrid, possibleMoves) {
+        const boxNumber = Math.floor(move.row / 3) * 3 + Math.floor(move.col / 3) + 1;
+        const technique = move.technique || this.getMoveTechnique(move);
+        
+        let moveExplanation = '';
+        let techniqueExplanation = '';
+        
+        switch (technique.toLowerCase().replace(/\s+/g, '_')) {
+            case 'naked_single':
+                moveExplanation = `The cell at Row ${move.row + 1}, Column ${move.col + 1} has ${move.value} as the only possible value. This is because all other numbers (1-9) are already present in either the same row, column, or 3x3 box (Box ${boxNumber}). By analyzing the constraints, we can see that this is the only valid choice for this cell.`;
+                techniqueExplanation = `A Naked Single occurs when a cell has only one possible candidate value remaining. This happens when all other numbers from 1 to 9 are already present in the same row, column, or 3x3 block as that cell. This is one of the most basic and commonly used techniques in Sudoku solving.`;
+                break;
                 
-                // Validate the analysis structure
-                if (analysis.moveExplanation && 
-                    analysis.techniqueExplanation && 
-                    analysis.moveAssessment && 
-                    typeof analysis.moveAssessment.isOptimal === 'boolean' &&
-                    analysis.moveAssessment.explanation) {
-                    console.log('Successfully generated analysis:', analysis);
-                    return analysis;
-                } else {
-                    throw new Error('Invalid analysis structure');
-                }
-            } catch (parseError) {
-                console.error('Error parsing analysis:', parseError);
-                console.log('Raw analysis text:', analysisText);
-                return this.generateFallbackAnalysis(move, currentGrid, allPossibleMoves);
-            }
-        } catch (error) {
-            console.error('Error in generateMoveAnalysis:', error);
-            return this.generateFallbackAnalysis(move, currentGrid, allPossibleMoves);
+            case 'hidden_single_row':
+            case 'hidden_single':
+                moveExplanation = `In Row ${move.row + 1}, the value ${move.value} can only be placed in Column ${move.col + 1}. While this cell might have other candidate values, ${move.value} cannot go anywhere else in Row ${move.row + 1}.`;
+                techniqueExplanation = `A Hidden Single occurs when a number can only be placed in one cell within a unit (row, column, or box), even though that cell might have other possible values. This technique requires looking at each number's possible positions within the unit to identify where it must be placed.`;
+                break;
+                
+            case 'hidden_single_column':
+                moveExplanation = `In Column ${move.col + 1}, the value ${move.value} can only be placed in Row ${move.row + 1}. While this cell might have other candidate values, ${move.value} cannot go anywhere else in Column ${move.col + 1}.`;
+                techniqueExplanation = `A Hidden Single in a column occurs when a number can only be placed in one cell within that column, even though that cell might have other possible values. This technique requires looking at each number's possible positions within the column.`;
+                    break;
+                
+            case 'hidden_single_box':
+                moveExplanation = `In Box ${boxNumber}, the value ${move.value} can only be placed at Row ${move.row + 1}, Column ${move.col + 1}. While this cell might have other candidate values, ${move.value} cannot go anywhere else in this 3x3 box.`;
+                techniqueExplanation = `A Hidden Single in a box occurs when a number can only be placed in one cell within a 3x3 box, even though that cell might have other possible values. This technique requires looking at each number's possible positions within the box.`;
+                break;
+                
+            case 'pointing_combination':
+            case 'pointing_pair':
+            case 'pointing_triple':
+                moveExplanation = `The value ${move.value} in Box ${boxNumber} can only appear in cells that align in a single row or column. This creates a powerful elimination pattern that affects cells outside the box.`;
+                techniqueExplanation = `A Pointing Combination occurs when the possible positions for a number within a 3x3 box are restricted to a single row or column. This creates a strong constraint that eliminates that number as a possibility from other cells in the same row or column outside the box.`;
+                break;
+                
+            case 'box_line_reduction':
+                moveExplanation = `The value ${move.value} in Row ${move.row + 1} or Column ${move.col + 1} is restricted to appear only within Box ${boxNumber}. This creates a powerful elimination pattern.`;
+                techniqueExplanation = `Box Line Reduction occurs when all possible positions for a number in a row or column are restricted to a single 3x3 box. This means the number must appear in one of those positions, eliminating it as a possibility from other cells in the same box.`;
+                break;
+                
+            case 'logical_deduction':
+            default:
+                moveExplanation = `Placing ${move.value} in Row ${move.row + 1}, Column ${move.col + 1} follows from careful analysis of the puzzle state and the constraints created by existing numbers.`;
+                techniqueExplanation = `This move uses logical deduction based on the current state of the puzzle and the fundamental rules of Sudoku. By analyzing the relationships between different cells and their candidates, we can determine where numbers must be placed.`;
         }
-    }
-
-    generateFallbackAnalysis(move, currentGrid, allPossibleMoves) {
-        // Generate a detailed analysis without API
-        const boxRow = Math.floor(move.row / 3) * 3;
-        const boxCol = Math.floor(move.col / 3) * 3;
-        
-        // Analyze the constraints
-        const rowValues = currentGrid[move.row].filter(v => v !== 0);
-        const colValues = currentGrid.map(row => row[move.col]).filter(v => v !== 0);
-        const boxValues = [];
-        for (let i = 0; i < 3; i++) {
-            for (let j = 0; j < 3; j++) {
-                const value = currentGrid[boxRow + i][boxCol + j];
-                if (value !== 0) boxValues.push(value);
-            }
-        }
-
-        // Find alternative moves
-        const alternativeMoves = allPossibleMoves.filter(possibleMove => 
-            possibleMove.possibilities.length === 1 &&
-            !(possibleMove.row === move.row && possibleMove.col === move.col)
-        );
-
-        // Analyze the impact of the move
-        const impactAnalysis = this.analyzeMoveImpact(move, currentGrid);
-        const isNakedSingle = alternativeMoves.length === 0;
-        const technique = move.technique?.toLowerCase() || '';
-        
-        // Generate detailed move explanation
-        const moveExplanation = `The value ${move.value} was placed in row ${move.row + 1}, column ${move.col + 1} based on the following analysis:
-
-1. Current Constraints:
-   - Row ${move.row + 1} already contains: ${rowValues.join(', ')}
-   - Column ${move.col + 1} already contains: ${colValues.join(', ')}
-   - Box ${Math.floor(move.row / 3) * 3 + Math.floor(move.col / 3) + 1} already contains: ${boxValues.join(', ')}
-
-2. Impact Analysis:
-   - This move affects ${impactAnalysis.affectedCells} cells
-   - It eliminates ${impactAnalysis.eliminatedPossibilities} possibilities
-   - Creates ${impactAnalysis.newConstraints} new constraints
-
-3. Strategic Value:
-   - ${impactAnalysis.strategicValue}`;
-
-        // Generate technique explanation
-        const techniqueExplanation = this.getDetailedTechniqueExplanation(move);
-
-        // Determine if this was the optimal move
-        const isOptimal = isNakedSingle || 
-                         technique.includes('hidden_single') || 
-                         (impactAnalysis.impactScore > 0.7 && alternativeMoves.length === 0);
-        
-        // Generate move assessment
-        const moveAssessment = {
-            isOptimal,
-            explanation: isOptimal ? 
-                `This was the optimal move because:
-1. ${isNakedSingle ? 'It was the only possible value for this cell' : 'It uses a strong solving technique'}
-2. Impact Score: ${impactAnalysis.impactScore.toFixed(2)} out of 1.0
-3. ${impactAnalysis.strategicValue}
-4. The move creates immediate progress and helps constrain ${impactAnalysis.affectedCells} other cells in the grid.` :
-                `While this move is valid, there are more strategic options available:
-1. Current Impact Score: ${impactAnalysis.impactScore.toFixed(2)} out of 1.0
-2. ${impactAnalysis.strategicValue}
-3. There are alternative moves that could lead to faster puzzle resolution.`,
-            betterMove: !isOptimal && alternativeMoves.length > 0 ? {
-                value: alternativeMoves[0].possibilities[0],
-                row: alternativeMoves[0].row,
-                col: alternativeMoves[0].col,
-                reason: `A better move would be placing ${alternativeMoves[0].possibilities[0]} at row ${alternativeMoves[0].row + 1}, column ${alternativeMoves[0].col + 1} because:
-1. It would create more immediate constraints
-2. It would affect more cells (${this.getRelatedCells(alternativeMoves[0].row, alternativeMoves[0].col).length} cells)
-3. It could reveal hidden patterns in the puzzle
-4. It follows a more optimal solving strategy`
-            } : null
-        };
 
         return {
             moveExplanation,
-            techniqueExplanation,
-            moveAssessment
+            techniqueExplanation
         };
-    }
-
-    analyzeMoveImpact(move, currentGrid) {
-        const relatedCells = this.getRelatedCells(move.row, move.col);
-        let eliminatedPossibilities = 0;
-        let newConstraints = 0;
-        
-        // Count affected empty cells
-        const affectedCells = relatedCells.length;
-        
-        // Analyze impact on related cells
-        relatedCells.forEach(cellRef => {
-            const [row, col] = cellRef.match(/\d+/g).map(n => parseInt(n) - 1);
-            if (currentGrid[row][col] === 0) {
-                eliminatedPossibilities++;
-                if (this.getPossibleValues(currentGrid, row, col).size === 2) {
-                    newConstraints++;
-                }
-            }
-        });
-        
-        // Calculate impact score (0 to 1)
-        const impactScore = (eliminatedPossibilities / 20) + (newConstraints / 10);
-        
-        // Generate strategic value assessment
-        let strategicValue = '';
-        if (impactScore > 0.8) {
-            strategicValue = 'This move has exceptional strategic value, creating multiple strong constraints.';
-        } else if (impactScore > 0.6) {
-            strategicValue = 'This move has good strategic value, affecting multiple cells and creating new constraints.';
-        } else if (impactScore > 0.4) {
-            strategicValue = 'This move has moderate strategic value, making steady progress in the puzzle.';
-        } else {
-            strategicValue = 'This move has basic strategic value, following fundamental Sudoku rules.';
-        }
-        
-        return {
-            affectedCells,
-            eliminatedPossibilities,
-            newConstraints,
-            impactScore,
-            strategicValue
-        };
-    }
-
-    getDetailedTechniqueExplanation(move) {
-        const technique = move.technique?.toLowerCase() || '';
-        const explanations = {
-            'naked_single': `A Naked Single is the most basic Sudoku technique where a cell has only one possible value. This occurs when all other numbers (1-9) are eliminated by existing values in the same row, column, or 3x3 box. In this case, cell (${move.row + 1}, ${move.col + 1}) could only contain ${move.value} because all other numbers were eliminated by the constraints.`,
-            
-            'hidden_single_row': `A Hidden Single in a row occurs when a number can only appear in one cell within a row, even though that cell might have other possible values. Here, ${move.value} could only be placed in column ${move.col + 1} of row ${move.row + 1} because all other positions in this row were blocked by existing numbers or constraints.`,
-            
-            'hidden_single_column': `A Hidden Single in a column occurs when a number can only appear in one cell within a column, even though that cell might have other possible values. In this case, ${move.value} could only be placed in row ${move.row + 1} of column ${move.col + 1} because all other positions in this column were blocked by existing numbers or constraints.`,
-            
-            'pointing_combination': `A Pointing Combination occurs when the possible positions for a number within a 3x3 box are restricted to a single row or column. This creates a powerful constraint that eliminates that number as a possibility from other cells in the same row or column outside the box. Here, ${move.value} forms such a pattern in box ${Math.floor(move.row / 3) * 3 + Math.floor(move.col / 3) + 1}.`,
-            
-            'logical_deduction': `Logical Deduction involves analyzing the relationships between different cells and their candidates to determine where a number must be placed. This move places ${move.value} in cell (${move.row + 1}, ${move.col + 1}) based on the current state of the puzzle and the constraints it creates.`,
-            
-            'player_move': `This move was made through careful analysis of the puzzle state and application of Sudoku rules. The placement of ${move.value} in cell (${move.row + 1}, ${move.col + 1}) follows from considering the existing numbers and their implications for possible placements.`
-        };
-        
-        return explanations[technique] || explanations['logical_deduction'];
     }
 
     wrapText(doc, text, x, y, maxWidth) {

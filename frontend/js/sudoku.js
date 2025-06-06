@@ -43,6 +43,9 @@ class SudokuGame {
         // Custom puzzle creation state
         this.isCreating = false;
         this.customPuzzle = null;
+
+        // New state for finalizeCustomPuzzle
+        this.isPlaying = false;
     }
 
     async newGame(difficulty = 'medium') {
@@ -185,9 +188,9 @@ class SudokuGame {
                     
                     // Analyze each possible value
                     for (const value of possibilities) {
-                        const moveInfo = this.analyzeMoveQuality(currentGrid, row, col, value);
-                        if (moveInfo) {
-                            possibleMoves.push(moveInfo);
+                    const moveInfo = this.analyzeMoveQuality(currentGrid, row, col, value);
+                    if (moveInfo) {
+                        possibleMoves.push(moveInfo);
                         }
                     }
                 }
@@ -935,30 +938,131 @@ class SudokuGame {
                         // Get all possible values for this cell
                         const possibilities = this.getCellPossibilities(currentGrid, row, col);
                         
-                        // Analyze each possible value
+                        if (possibilities.size === 1) {
+                            // This is a naked single
+                            const value = Array.from(possibilities)[0];
+                            possibleMoves.push({
+                                row,
+                                col,
+                                value,
+                                technique: 'Naked Single',
+                                difficulty: 'Basic',
+                                reason: 'Only one possible value for this cell',
+                                score: 1
+                            });
+                            continue;
+                        }
+                        
+                        // Check for hidden singles in row
                         for (const value of possibilities) {
-                            const moveInfo = this.analyzeMoveQuality(currentGrid, row, col, value);
-                            if (moveInfo) {
-                                possibleMoves.push(moveInfo);
+                            let isHiddenSingle = true;
+                            for (let c = 0; c < 9; c++) {
+                                if (c !== col && currentGrid[row][c] === 0) {
+                                    const otherPoss = this.getCellPossibilities(currentGrid, row, c);
+                                    if (otherPoss.has(value)) {
+                                        isHiddenSingle = false;
+                                        break;
+                                    }
+                                }
                             }
+                            if (isHiddenSingle) {
+                                possibleMoves.push({
+                                    row,
+                                    col,
+                                    value,
+                                    technique: 'Hidden Single Row',
+                                    difficulty: 'Intermediate',
+                                    reason: `${value} can only go in this cell in row ${row + 1}`,
+                                    score: 2
+                                });
+                                continue;
+                            }
+                        }
+                        
+                        // Check for hidden singles in column
+                        for (const value of possibilities) {
+                            let isHiddenSingle = true;
+                            for (let r = 0; r < 9; r++) {
+                                if (r !== row && currentGrid[r][col] === 0) {
+                                    const otherPoss = this.getCellPossibilities(currentGrid, r, col);
+                                    if (otherPoss.has(value)) {
+                                        isHiddenSingle = false;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (isHiddenSingle) {
+                                possibleMoves.push({
+                                    row,
+                                    col,
+                                    value,
+                                    technique: 'Hidden Single Column',
+                                    difficulty: 'Intermediate',
+                                    reason: `${value} can only go in this cell in column ${col + 1}`,
+                                    score: 2
+                                });
+                                continue;
+                            }
+                        }
+                        
+                        // Check for hidden singles in box
+                        const boxRow = Math.floor(row / 3) * 3;
+                        const boxCol = Math.floor(col / 3) * 3;
+                        for (const value of possibilities) {
+                            let isHiddenSingle = true;
+                            for (let r = 0; r < 3; r++) {
+                                for (let c = 0; c < 3; c++) {
+                                    const currentRow = boxRow + r;
+                                    const currentCol = boxCol + c;
+                                    if ((currentRow !== row || currentCol !== col) && currentGrid[currentRow][currentCol] === 0) {
+                                        const otherPoss = this.getCellPossibilities(currentGrid, currentRow, currentCol);
+                                        if (otherPoss.has(value)) {
+                                            isHiddenSingle = false;
+                                            break;
+                                        }
+                                    }
+                                }
+                                if (!isHiddenSingle) break;
+                            }
+                            if (isHiddenSingle) {
+                                possibleMoves.push({
+                                    row,
+                                    col,
+                                    value,
+                                    technique: 'Hidden Single Box',
+                                    difficulty: 'Intermediate',
+                                    reason: `${value} can only go in this cell in box ${Math.floor(row / 3) * 3 + Math.floor(col / 3) + 1}`,
+                                    score: 2
+                                });
+                                continue;
+                            }
+                        }
+                        
+                        // If no special technique found, add each possibility as a logical deduction move
+                        for (const value of possibilities) {
+                            possibleMoves.push({
+                                row,
+                                col,
+                                value,
+                                technique: 'Logical Deduction',
+                                difficulty: 'Advanced',
+                                reason: 'Move made based on logical deduction',
+                                score: 3
+                            });
                         }
                     }
                 }
             }
-
-            if (possibleMoves.length === 0) break;
-
-            // Sort moves by their strategic value
-            possibleMoves.sort((a, b) => {
-                if (a.score !== b.score) {
-                    return a.score - b.score;
-                }
-                const aImpact = this.calculateMoveImpact(currentGrid, a);
-                const bImpact = this.calculateMoveImpact(currentGrid, b);
-                return bImpact - aImpact;
-            });
-
-            // Take the best strategic move
+            
+            // If no moves found, puzzle is solved
+            if (possibleMoves.length === 0) {
+                break;
+            }
+            
+            // Sort moves by score (lower is better)
+            possibleMoves.sort((a, b) => a.score - b.score);
+            
+            // Get the best move
             let bestMove = possibleMoves[0];
             
             // Verify if this move leads to a valid solution
@@ -979,9 +1083,69 @@ class SudokuGame {
             currentGrid[bestMove.row][bestMove.col] = bestMove.value;
         }
 
-        // Add all steps to the solution steps array
-        this.allSolutionSteps = this.allSolutionSteps.concat(steps);
         return steps;
+    }
+
+    isHiddenSingle(grid, row, col, value) {
+        // Check row
+        let rowCount = 0;
+        for (let c = 0; c < 9; c++) {
+            if (c !== col && grid[row][c] === 0 && this.getCellPossibilities(grid, row, c).has(value)) {
+                rowCount++;
+            }
+        }
+        if (rowCount === 0) return true;
+
+        // Check column
+        let colCount = 0;
+        for (let r = 0; r < 9; r++) {
+            if (r !== row && grid[r][col] === 0 && this.getCellPossibilities(grid, r, col).has(value)) {
+                colCount++;
+            }
+        }
+        if (colCount === 0) return true;
+
+        // Check box
+        const boxRow = Math.floor(row / 3) * 3;
+        const boxCol = Math.floor(col / 3) * 3;
+        let boxCount = 0;
+        for (let r = 0; r < 3; r++) {
+            for (let c = 0; c < 3; c++) {
+                const currentRow = boxRow + r;
+                const currentCol = boxCol + c;
+                if ((currentRow !== row || currentCol !== col) && 
+                    grid[currentRow][currentCol] === 0 && 
+                    this.getCellPossibilities(grid, currentRow, currentCol).has(value)) {
+                    boxCount++;
+                }
+            }
+        }
+        return boxCount === 0;
+    }
+
+    getCellPossibilities(grid, row, col) {
+        const possibilities = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+        
+        // Check row
+        for (let c = 0; c < 9; c++) {
+            possibilities.delete(grid[row][c]);
+        }
+        
+        // Check column
+        for (let r = 0; r < 9; r++) {
+            possibilities.delete(grid[r][col]);
+        }
+        
+        // Check box
+        const boxRow = Math.floor(row / 3) * 3;
+        const boxCol = Math.floor(col / 3) * 3;
+        for (let r = 0; r < 3; r++) {
+            for (let c = 0; c < 3; c++) {
+                possibilities.delete(grid[boxRow + r][boxCol + c]);
+            }
+        }
+        
+        return possibilities;
     }
 
     getAllSolutionSteps() {
@@ -1256,8 +1420,10 @@ class SudokuGame {
     startTimer() {
         if (this.isCreating) return; // Don't start timer in creation mode
         
-        this.stopTimer();
-        this.startTime = Date.now() - this.elapsedTime;
+        if (this.timerInterval) {
+            clearInterval(this.timerInterval);
+        }
+        this.startTime = Date.now() - (this.elapsedTime || 0);
         this.timerInterval = setInterval(() => {
             this.elapsedTime = Date.now() - this.startTime;
         }, 1000);
@@ -1270,18 +1436,8 @@ class SudokuGame {
         }
     }
 
-    pauseTimer() {
-        this.stopTimer();
-    }
-
-    resumeTimer() {
-        if (this.startTime) {
-            this.startTimer();
-        }
-    }
-
     getFormattedTime() {
-        const seconds = Math.floor(this.elapsedTime / 1000);
+        const seconds = Math.floor((this.elapsedTime || 0) / 1000);
         const minutes = Math.floor(seconds / 60);
         const remainingSeconds = seconds % 60;
         return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
@@ -1342,8 +1498,12 @@ class SudokuGame {
 
     validateCustomPuzzle() {
         // First check for conflicts
-        if (this.findConflicts().length > 0) {
-            return false;
+        const conflicts = this.findConflicts();
+        if (conflicts.length > 0) {
+            return {
+                isValid: false,
+                message: 'Invalid puzzle! There are conflicts in the grid.'
+            };
         }
 
         // Convert grid to simple array for validation
@@ -1355,129 +1515,57 @@ class SudokuGame {
             }))
         );
         
-        // Check if puzzle has at least 17 clues (minimum for unique solution)
+        // Count clues for information only
         const cluesCount = puzzleArray.flat().filter(cell => cell.value !== 0).length;
-        if (cluesCount < 17) {
-            return false;
-        }
+        console.log('Number of clues:', cluesCount);
 
         // Check for unique solution
         const solutions = [];
         this.solveSudoku(puzzleArray, solutions, 2);
-        return solutions.length === 1;
-    }
-
-    findConflicts() {
-        const conflicts = new Set();
-
-        // Check rows
-        for (let row = 0; row < 9; row++) {
-            const seen = new Map();
-            for (let col = 0; col < 9; col++) {
-                const value = this.grid[row][col].value;
-                if (value === 0) continue;
-                
-                if (seen.has(value)) {
-                    conflicts.add(JSON.stringify({row, col}));
-                    conflicts.add(JSON.stringify({row, col: seen.get(value)}));
+        
+        if (solutions.length === 0) {
+            return {
+                isValid: false,
+                message: 'Invalid puzzle! The puzzle has no solution.'
+            };
+        } else if (solutions.length > 1) {
+            // Find the differences between solutions to provide helpful feedback
+            const differences = this.findSolutionDifferences(solutions[0], solutions[1]);
+            if (differences.length > 0) {
+                const diff = differences[0];
+                return {
+                    isValid: false,
+                    message: `The puzzle has multiple solutions. Try adding a number at Row ${diff.row + 1}, Column ${diff.col + 1}.`
+                };
                 } else {
-                    seen.set(value, col);
+                return {
+                    isValid: false,
+                    message: 'Invalid puzzle! The puzzle has multiple solutions.'
+                };
                 }
             }
+        
+        return {
+            isValid: true,
+            message: 'Valid puzzle! You can start playing.'
+        };
         }
 
-        // Check columns
-        for (let col = 0; col < 9; col++) {
-            const seen = new Map();
+    findSolutionDifferences(solution1, solution2) {
+        const differences = [];
             for (let row = 0; row < 9; row++) {
-                const value = this.grid[row][col].value;
-                if (value === 0) continue;
-                
-                if (seen.has(value)) {
-                    conflicts.add(JSON.stringify({row, col}));
-                    conflicts.add(JSON.stringify({row: seen.get(value), col}));
-                } else {
-                    seen.set(value, row);
+            for (let col = 0; col < 9; col++) {
+                if (solution1[row][col] !== solution2[row][col]) {
+                    differences.push({
+                        row: row,
+                        col: col,
+                        value1: solution1[row][col],
+                        value2: solution2[row][col]
+                    });
                 }
             }
         }
-
-        // Check 3x3 boxes
-        for (let boxRow = 0; boxRow < 3; boxRow++) {
-            for (let boxCol = 0; boxCol < 3; boxCol++) {
-                const seen = new Map();
-                for (let i = 0; i < 3; i++) {
-                    for (let j = 0; j < 3; j++) {
-                        const row = boxRow * 3 + i;
-                        const col = boxCol * 3 + j;
-                        const value = this.grid[row][col].value;
-                        if (value === 0) continue;
-                        
-                        if (seen.has(value)) {
-                            conflicts.add(JSON.stringify({row, col}));
-                            const [prevRow, prevCol] = seen.get(value);
-                            conflicts.add(JSON.stringify({row: prevRow, col: prevCol}));
-                        } else {
-                            seen.set(value, [row, col]);
-                        }
-                    }
-                }
-            }
-        }
-
-        return Array.from(conflicts).map(c => JSON.parse(c));
-    }
-
-    finalizeCustomPuzzle() {
-        if (!this.isCreating) return false;
-
-        // Store the initial puzzle state
-        const initialPuzzle = this.grid.map(row => 
-            row.map(cell => ({
-                value: cell.value,
-                isFixed: cell.value !== 0, // Mark non-empty cells as fixed
-                notes: new Set()
-            }))
-        );
-
-        // Find the solution
-        const puzzleValues = this.grid.map(row => 
-            row.map(cell => ({
-                value: cell.value,
-                isFixed: cell.isFixed,
-                notes: new Set()
-            }))
-        );
-        const solutions = [];
-        this.solveSudoku(puzzleValues, solutions, 1);
-        
-        if (solutions.length === 1) {
-            // Store the solution
-            this.solution = solutions[0];
-            
-            // Set up the game grid with the initial puzzle
-            this.grid = initialPuzzle;
-            
-            // Reset game state
-            this.isCreating = false;
-            this.customPuzzle = null;
-            this.selectedCell = null;
-            this.isNotesMode = false;
-            this.hintsRemaining = 3;
-            this.checkCount = 0;
-            this.undoStack = [];
-            this.redoStack = [];
-            this.allSolutionSteps = [];
-            
-            // Reset and start timer
-            this.stopTimer();
-            this.elapsedTime = 0;
-            this.startTimer();
-            
-            return true;
-        }
-        
-        return false;
+        return differences;
     }
 
     solveSudoku(puzzle, solutions, limit) {
@@ -1498,15 +1586,58 @@ class SudokuGame {
             if (this.isValidPlacement(puzzle, row, col, num)) {
                 puzzle[row][col].value = num;
                 this.solveSudoku(puzzle, solutions, limit);
+                if (solutions.length >= limit) return;
                 puzzle[row][col].value = 0;
             }
         }
     }
 
-    findEmptyCell(puzzle) {
+    findNearbyGivens(puzzle, row, col) {
+        const nearbyGivens = [];
+        
+        // Check same row
+        for (let c = 0; c < 9; c++) {
+            if (puzzle[row][c].isFixed) {
+                nearbyGivens.push({
+                    value: puzzle[row][c].value,
+                    position: `Row ${row + 1}, Column ${c + 1}`
+                });
+            }
+        }
+        
+        // Check same column
+        for (let r = 0; r < 9; r++) {
+            if (puzzle[r][col].isFixed) {
+                nearbyGivens.push({
+                    value: puzzle[r][col].value,
+                    position: `Row ${r + 1}, Column ${col + 1}`
+                });
+            }
+        }
+        
+        // Check same box
+        const boxRow = Math.floor(row / 3) * 3;
+        const boxCol = Math.floor(col / 3) * 3;
+        for (let r = 0; r < 3; r++) {
+            for (let c = 0; c < 3; c++) {
+                const currentRow = boxRow + r;
+                const currentCol = boxCol + c;
+                if (puzzle[currentRow][currentCol].isFixed) {
+                    nearbyGivens.push({
+                        value: puzzle[currentRow][currentCol].value,
+                        position: `Row ${currentRow + 1}, Column ${currentCol + 1}`
+                    });
+                }
+            }
+        }
+        
+        return nearbyGivens;
+    }
+
+    findEmptyCell(grid) {
         for (let row = 0; row < 9; row++) {
             for (let col = 0; col < 9; col++) {
-                if (puzzle[row][col].value === 0) {
+                if (grid[row][col].value === 0) {
                     return [row, col];
                 }
             }
@@ -1721,64 +1852,116 @@ class SudokuGame {
         doc.addPage();
     }
 
-    isHiddenSingle(grid, row, col, value, type) {
-        let count = 0;
-        
-        if (type === 'row') {
-            // Check row
-            for (let c = 0; c < 9; c++) {
-                if (c !== col && grid[row][c] === 0 && 
-                    this.isValidPlacement(grid, row, c, value)) {
-                    count++;
+    findConflicts() {
+        const conflicts = new Set();
+
+        // Check rows
+        for (let row = 0; row < 9; row++) {
+            const seen = new Map();
+            for (let col = 0; col < 9; col++) {
+                const value = this.grid[row][col].value;
+                if (value === 0) continue;
+                
+                if (seen.has(value)) {
+                    conflicts.add(JSON.stringify({row, col}));
+                    conflicts.add(JSON.stringify({row, col: seen.get(value)}));
+                } else {
+                    seen.set(value, col);
                 }
             }
-        } else if (type === 'column') {
-            // Check column
-            for (let r = 0; r < 9; r++) {
-                if (r !== row && grid[r][col] === 0 && 
-                    this.isValidPlacement(grid, r, col, value)) {
-                    count++;
+        }
+
+        // Check columns
+        for (let col = 0; col < 9; col++) {
+            const seen = new Map();
+            for (let row = 0; row < 9; row++) {
+                const value = this.grid[row][col].value;
+                if (value === 0) continue;
+                
+                if (seen.has(value)) {
+                    conflicts.add(JSON.stringify({row, col}));
+                    conflicts.add(JSON.stringify({row: seen.get(value), col}));
+                } else {
+                    seen.set(value, row);
                 }
             }
-        } else if (type === 'box') {
-            // Check box
-            const boxRow = Math.floor(row / 3) * 3;
-            const boxCol = Math.floor(col / 3) * 3;
-            for (let r = 0; r < 3; r++) {
-                for (let c = 0; c < 3; c++) {
-                    const currentRow = boxRow + r;
-                    const currentCol = boxCol + c;
-                    if ((currentRow !== row || currentCol !== col) && 
-                        grid[currentRow][currentCol] === 0 && 
-                        this.isValidPlacement(grid, currentRow, currentCol, value)) {
-                        count++;
+        }
+
+        // Check 3x3 boxes
+        for (let boxRow = 0; boxRow < 3; boxRow++) {
+            for (let boxCol = 0; boxCol < 3; boxCol++) {
+                const seen = new Map();
+                for (let i = 0; i < 3; i++) {
+                    for (let j = 0; j < 3; j++) {
+                        const row = boxRow * 3 + i;
+                        const col = boxCol * 3 + j;
+                        const value = this.grid[row][col].value;
+                        if (value === 0) continue;
+                        
+                        if (seen.has(value)) {
+                            conflicts.add(JSON.stringify({row, col}));
+                            const [prevRow, prevCol] = seen.get(value);
+                            conflicts.add(JSON.stringify({row: prevRow, col: prevCol}));
+                        } else {
+                            seen.set(value, [row, col]);
+                        }
                     }
                 }
             }
         }
-        
-        return count === 0;
+
+        return Array.from(conflicts).map(c => JSON.parse(c));
     }
 
-    isPointingCombination(grid, row, col, value) {
-        const boxRow = Math.floor(row / 3) * 3;
-        const boxCol = Math.floor(col / 3) * 3;
-        let rowCount = 0;
-        let colCount = 0;
-        let boxCount = 0;
+    finalizeCustomPuzzle() {
+        if (!this.isCreating) return false;
+
+        // Store the initial puzzle state
+        const initialPuzzle = this.grid.map(row => 
+            row.map(cell => ({
+                value: cell.value,
+                isFixed: cell.value !== 0, // Mark non-empty cells as fixed
+                notes: new Set()
+            }))
+        );
+
+        // Find the solution
+        const puzzleValues = this.grid.map(row => 
+            row.map(cell => ({
+                value: cell.value,
+                isFixed: cell.isFixed,
+                notes: new Set()
+            }))
+        );
+        const solutions = [];
+        this.solveSudoku(puzzleValues, solutions, 1);
         
-        // Count possible positions in the box
-        for (let r = boxRow; r < boxRow + 3; r++) {
-            for (let c = boxCol; c < boxCol + 3; c++) {
-                if (grid[r][c] === 0 && this.isValidPlacement(grid, r, c, value)) {
-                    boxCount++;
-                    if (r === row) rowCount++;
-                    if (c === col) colCount++;
-                }
-            }
+        if (solutions.length === 1) {
+            // Store the solution
+            this.solution = solutions[0];
+            
+            // Set up the game grid with the initial puzzle
+            this.grid = initialPuzzle;
+            
+            // Reset game state
+            this.isCreating = false;
+            this.customPuzzle = null;
+            this.selectedCell = null;
+            this.isNotesMode = false;
+            this.hintsRemaining = 3;
+            this.checkCount = 0;
+            this.undoStack = [];
+            this.redoStack = [];
+            this.allSolutionSteps = [];
+            
+            // Reset and start timer
+            this.stopTimer();
+            this.elapsedTime = 0;
+            this.startTimer();
+            
+            return true;
         }
         
-        // Check if this forms a pointing pair/triple
-        return (boxCount === 2 || boxCount === 3) && (rowCount === boxCount || colCount === boxCount);
+        return false;
     }
 }
