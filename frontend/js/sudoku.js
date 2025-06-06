@@ -1224,4 +1224,137 @@ class SudokuGame {
         
         return cells;
     }
+
+    generatePDFSolutionSection() {
+        // Get only the recorded steps (player moves and hints) sorted by timestamp
+        const recordedSteps = [...this.allSolutionSteps].sort((a, b) => a.timestamp - b.timestamp);
+        
+        let solutionText = "Step by Step Solution\n\n";
+        
+        // Create a copy of initial grid state
+        let currentGrid = this.grid.map(row => 
+            row.map(cell => ({
+                value: cell.value,
+                isFixed: cell.isFixed,
+                notes: new Set(cell.notes)
+            }))
+        );
+        
+        recordedSteps.forEach((step, index) => {
+            // Format the move number and location
+            const moveNumber = index + 1;
+            const location = `R${step.row + 1}C${step.col + 1}`;
+            
+            // Apply the move to our current grid state
+            currentGrid[step.row][step.col] = {
+                value: step.value,
+                isFixed: false,
+                notes: new Set()
+            };
+            
+            // Generate ASCII representation of the grid
+            let gridVisual = "\n";
+            gridVisual += "┌───────┬───────┬───────┐\n";
+            for (let row = 0; row < 9; row++) {
+                let line = "│ ";
+                for (let col = 0; col < 9; col++) {
+                    // Highlight the cell that was just changed
+                    const isChangedCell = row === step.row && col === step.col;
+                    const value = currentGrid[row][col].value || ' ';
+                    line += isChangedCell ? `[${value}]` : ` ${value} `;
+                    if (col === 2 || col === 5) line += "│ ";
+                    if (col === 8) line += "│";
+                }
+                gridVisual += line + "\n";
+                if (row === 2 || row === 5) {
+                    gridVisual += "├───────┼───────┼───────┤\n";
+                }
+                if (row === 8) {
+                    gridVisual += "└───────┴───────┴───────┘\n";
+                }
+            }
+            
+            // Format step information
+            solutionText += `Step ${moveNumber}\n`;
+            solutionText += `${step.strategy} at ${location}\n`;
+            solutionText += `Move: Placed ${step.value} in ${location}\n\n`;
+            
+            // Add move type explanation based on the technique
+            switch(step.technique) {
+                case 'naked_single':
+                    solutionText += "This cell has only one possible value because all other numbers (1-9) are already present in either:\n";
+                    solutionText += "- The same row\n";
+                    solutionText += "- The same column\n";
+                    solutionText += "- The same 3x3 box\n";
+                    break;
+                    
+                case 'hidden_single_row':
+                    solutionText += `In row ${step.row + 1}, ${step.value} can only be placed in this cell because:\n`;
+                    solutionText += "- All other cells in the row either:\n";
+                    solutionText += "  * Already contain a number\n";
+                    solutionText += "  * Cannot contain this number due to column/box constraints\n";
+                    break;
+                    
+                case 'hidden_single_column':
+                    solutionText += `In column ${step.col + 1}, ${step.value} can only be placed in this cell because:\n`;
+                    solutionText += "- All other cells in the column either:\n";
+                    solutionText += "  * Already contain a number\n";
+                    solutionText += "  * Cannot contain this number due to row/box constraints\n";
+                    break;
+                    
+                case 'hidden_single_box':
+                    solutionText += `In this 3x3 box, ${step.value} can only be placed in this cell because:\n`;
+                    solutionText += "- All other cells in the box either:\n";
+                    solutionText += "  * Already contain a number\n";
+                    solutionText += "  * Cannot contain this number due to row/column constraints\n";
+                    break;
+                    
+                case 'pointing_combination':
+                    solutionText += "This move uses a pointing pair/triple pattern:\n";
+                    solutionText += "- A number can only appear in 2-3 cells in a box\n";
+                    solutionText += "- These cells all lie in the same row or column\n";
+                    solutionText += "- This eliminates the number from other cells in that row/column\n";
+                    break;
+                    
+                case 'box_line_reduction':
+                    solutionText += "This move uses box/line reduction:\n";
+                    solutionText += "- A number in a row/column is restricted to one box\n";
+                    solutionText += "- This eliminates that number from other cells in the box\n";
+                    break;
+                    
+                case 'player_move':
+                    if (step.reason === "Player placed this number manually") {
+                        const moveQuality = this.analyzeMoveQuality(
+                            currentGrid.map(row => row.map(cell => cell.value)),
+                            step.row,
+                            step.col,
+                            step.value
+                        );
+                        if (moveQuality.score <= step.score) {
+                            solutionText += "This was a good move because:\n";
+                            solutionText += `- ${moveQuality.reason}\n`;
+                        } else {
+                            solutionText += "While this move is valid, there were better options available:\n";
+                            solutionText += `- ${moveQuality.strategy} was possible\n`;
+                            solutionText += `- ${moveQuality.reason}\n`;
+                        }
+                    }
+                    break;
+                    
+                default:
+                    solutionText += `${step.reason}\n`;
+            }
+            
+            // Add visual representation
+            solutionText += "\nGrid after this move:\n";
+            solutionText += gridVisual;
+            solutionText += "\n";
+            
+            // Add difficulty level
+            solutionText += `Difficulty: ${step.difficulty}\n`;
+            solutionText += "─".repeat(50) + "\n\n";
+        });
+        
+        return solutionText;
+    }
 }

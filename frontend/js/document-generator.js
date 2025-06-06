@@ -1,415 +1,423 @@
 class DocumentGenerator {
     constructor(game) {
         this.game = game;
+        // Store initial state when generator is created
+        this.initialState = this.getInitialState();
+    }
+
+    getInitialState() {
+        // Get the initial puzzle state (given numbers)
+        const initial = [];
+        for (let i = 0; i < 9; i++) {
+            initial[i] = [];
+            for (let j = 0; j < 9; j++) {
+                const cell = this.game.grid[i][j];
+                initial[i][j] = cell.isFixed ? cell.value : 0;
+            }
+        }
+        return initial;
     }
 
     async generateSolutionDocument() {
+        console.log('Starting document generation...');
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF();
         
-        // Part 1: Puzzle Introduction
-        this.addTitle(doc);
-        this.addIntroduction(doc);
+        // Get all moves and statistics
+        const moves = this.getActualMoves();
+        const stats = this.generateStatistics(moves);
         
-        // Part 2: How to Play Sudoku
-        this.addHowToPlay(doc);
+        // Generate each section in the new order
+        this.addHowToPlaySection(doc);                  // First page with how to play
+        this.addStepByStepSolution(doc, moves, stats);  // Steps with summary
+        this.addFinalPuzzle(doc);                      // Final puzzle at the end
         
-        // Part 3: Step-by-Step Solution
-        this.addSolutionSteps(doc);
-        
-        // Part 4: Final Puzzle Snapshot
-        await this.addFinalSnapshot(doc);
-        
-        // Save the document
         doc.save(`sudoku-solution-${this.formatDate()}.pdf`);
     }
 
-    addTitle(doc) {
-        doc.setFontSize(20);
-        doc.text('Sudoku Puzzle Solution', 20, 20);
-        doc.setFontSize(12);
-        doc.text(`Generated on ${this.formatDate()}`, 20, 30);
-        doc.line(20, 35, 190, 35);
+    getActualMoves() {
+        // Get all solution steps from the game
+        const allSteps = this.game.allSolutionSteps || [];
+        console.log('Total steps found:', allSteps.length);
+
+        // Sort by timestamp to maintain order
+        const sortedSteps = [...allSteps].sort((a, b) => {
+            if (a.timestamp && b.timestamp) return a.timestamp - b.timestamp;
+            return 0;
+        });
+
+        // Filter out any invalid or temporary moves
+        const validMoves = sortedSteps.filter(move => {
+            // Basic validation
+            if (!move || typeof move !== 'object') return false;
+            if (!move.value || typeof move.row === 'undefined' || typeof move.col === 'undefined') return false;
+            if (move.row < 0 || move.row >= 9 || move.col < 0 || move.col >= 9) return false;
+            
+            // Skip temporary or system-generated moves
+            if (move.isTemporary || move.isSystemGenerated) return false;
+            
+            // Skip if it's a given number in the initial state
+            if (this.initialState[move.row][move.col] > 0) return false;
+
+            return true;
+        });
+
+        // Group by cell position to get final state (in case of multiple moves in same cell)
+        const finalMoves = new Map();
+        validMoves.forEach((move, index) => {
+            const key = `${move.row}-${move.col}`;
+            // Keep the move if it's the first one we've seen for this cell
+            // or if it has a later timestamp
+            const existing = finalMoves.get(key);
+            if (!existing || 
+                (move.timestamp && (!existing.timestamp || move.timestamp > existing.timestamp))) {
+                finalMoves.set(key, { ...move, sequence: index });
+            }
+        });
+
+        // Convert back to array and sort by sequence
+        const moves = Array.from(finalMoves.values());
+        moves.sort((a, b) => a.sequence - b.sequence);
+
+        // Add additional analysis to each move
+        moves.forEach(move => {
+            // Add related cells
+            move.relatedCells = this.getRelatedCells(move.row, move.col);
+            
+            // Add difficulty if not present
+            if (!move.difficulty) {
+                move.difficulty = this.getMoveDifficulty(move);
+            }
+
+            // Add technique if not present
+            if (!move.technique) {
+                move.technique = this.getMoveTechnique(move);
+            }
+        });
+
+        console.log('Final processed moves:', moves.length);
+        return moves;
     }
 
-    addIntroduction(doc) {
-        doc.setFontSize(12);
-        const intro = 'This document contains a step-by-step breakdown of the solved Sudoku puzzle, ' +
-                     'including logic used, explanation for each move, and how Sudoku works.';
-        doc.text(intro, 20, 45, { maxWidth: 170 });
-    }
-
-    addHowToPlay(doc) {
-        doc.setFontSize(16);
-        doc.text('How to Play Sudoku', 20, 65);
-        doc.setFontSize(12);
+    getRelatedCells(row, col) {
+        const related = new Set();
         
-        const rules = [
-            'Basic Rule: Fill the 9×9 grid with numbers 1-9, ensuring each number appears exactly once in every row, column, and 3×3 box.',
-            '',
-            'Solving Techniques:',
-            '',
-            '1. Basic Techniques:',
+        // Add all cells in the same row
+        for (let c = 0; c < 9; c++) {
+            if (c !== col) {
+                related.add(`R${row + 1}C${c + 1}`);
+            }
+        }
+        
+        // Add all cells in the same column
+        for (let r = 0; r < 9; r++) {
+            if (r !== row) {
+                related.add(`R${r + 1}C${col + 1}`);
+            }
+        }
+        
+        // Add all cells in the same 3x3 box
+        const boxRow = Math.floor(row / 3) * 3;
+        const boxCol = Math.floor(col / 3) * 3;
+        for (let r = boxRow; r < boxRow + 3; r++) {
+            for (let c = boxCol; c < boxCol + 3; c++) {
+                if (r !== row || c !== col) {
+                    related.add(`R${r + 1}C${c + 1}`);
+                }
+            }
+        }
+        
+        return Array.from(related);
+    }
+
+    getMoveDifficulty(move) {
+        if (move.technique === 'Logical Deduction') return 'Advanced';
+        if (move.technique === 'Hidden Single' || move.technique === 'Pointing Combination') return 'Intermediate';
+        return 'Basic';
+    }
+
+    getMoveTechnique(move) {
+        if (move.strategy === 'Player Move') return 'Logical Deduction';
+        if (move.type === 'hint') return 'Hidden Single';
+        return 'Naked Single';
+    }
+
+    generateStatistics(moves) {
+        const stats = {
+            difficulty: {
+                'Advanced': 0,
+                'Intermediate': 0,
+                'Basic': 0
+            },
+            strategy: {
+                'Logical Deduction': 0,
+                'Naked Single': 0,
+                'Hidden Single (Column)': 0,
+                'Hidden Single (Row)': 0,
+                'Pointing Combination': 0
+            },
+            totalSteps: moves.length
+        };
+
+        moves.forEach(move => {
+            // Count difficulty
+            if (move.difficulty) {
+                stats.difficulty[move.difficulty]++;
+            } else {
+                stats.difficulty['Basic']++;
+            }
+
+            // Count strategy
+            if (move.technique) {
+                stats.strategy[move.technique] = (stats.strategy[move.technique] || 0) + 1;
+            }
+        });
+
+        return stats;
+    }
+
+    addHowToPlaySection(doc) {
+        // Title
+        doc.setFontSize(18);
+        doc.text('Sudoku Puzzle Solution', 20, 20);
+
+        // Generation timestamp
+        doc.setFontSize(10);
+        doc.text(`Generated on ${this.formatDate()}`, 20, 30);
+
+        // Introduction
+        doc.setFontSize(11);
+        doc.text('This document contains a step-by-step breakdown of the solved Sudoku puzzle, including', 20, 45);
+        doc.text('logic used, explanation for each move, and how Sudoku works.', 20, 52);
+
+        // How to Play Section
+        doc.setFontSize(14);
+        doc.text('How to Play Sudoku', 20, 70);
+
+        // Basic Rule
+        doc.setFontSize(11);
+        doc.text('Basic Rule: Fill the 9×9 grid with numbers 1-9, ensuring each number appears exactly once', 20, 85);
+        doc.text('in every row, column, and 3×3 box.', 20, 92);
+
+        // Solving Techniques Section
+        doc.text('Solving Techniques:', 20, 110);
+
+        // 1. Basic Techniques
+        doc.setFontSize(12);
+        doc.text('1. Basic Techniques:', 20, 125);
+        doc.setFontSize(11);
+        const basicTechniques = [
             '• Scanning: Check rows, columns, and boxes to find where a number can legally be placed',
             '• Single Candidate (Naked Single): When only one number can go in a cell',
-            '• Hidden Singles: When a number can only go in one cell within a row, column, or box',
-            '',
-            '2. Intermediate Techniques:',
-            '• Pointing Pairs/Triples: When a number is restricted to 2-3 cells in a box, aligned in a row/column',
+            '• Hidden Singles: When a number can only go in one cell within a row, column, or box'
+        ];
+        let y = 135;
+        basicTechniques.forEach(technique => {
+            const lines = doc.splitTextToSize(technique, 170);
+            lines.forEach(line => {
+                doc.text(line, 20, y);
+                y += 7;
+            });
+        });
+
+        // 2. Intermediate Techniques
+        doc.setFontSize(12);
+        doc.text('2. Intermediate Techniques:', 20, y + 5);
+        doc.setFontSize(11);
+        const intermediateTechniques = [
+            '• Pointing Pairs/Triples: When a number is restricted to 2-3 cells in a box, aligned in a',
+            '  row/column',
             '• Box/Line Reduction: When a number in a row/column must be in a specific box',
             '• Hidden Pairs: When two cells in a unit share the same two candidates exclusively',
-            '• Naked Pairs/Triples: When 2-3 cells contain the same 2-3 candidates only',
-            '',
-            '3. Advanced Techniques:',
+            '• Naked Pairs/Triples: When 2-3 cells contain the same 2-3 candidates only'
+        ];
+        y += 15;
+        intermediateTechniques.forEach(technique => {
+            const lines = doc.splitTextToSize(technique, 170);
+            lines.forEach(line => {
+                doc.text(line, 20, y);
+                y += 7;
+            });
+        });
+
+        // 3. Advanced Techniques
+        doc.setFontSize(12);
+        doc.text('3. Advanced Techniques:', 20, y + 5);
+        doc.setFontSize(11);
+        const advancedTechniques = [
             '• X-Wing: When a number appears in exactly two positions in two different rows/columns',
             '• Swordfish: Similar to X-Wing but with three rows/columns',
             '• XY-Wing: A pattern involving three cells with specific candidate relationships',
-            '• Remote Pairs: Chain of pairs that can help eliminate candidates',
-            '',
-            'Tips for Success:',
-            '• Start with the most constrained areas (rows/columns/boxes with more numbers)',
-            '• Use pencil marks to note possible numbers for each empty cell',
-            '• Look for patterns and relationships between cells',
-            '• Work systematically and be patient',
-            '• Double-check your work regularly'
+            '• Remote Pairs: Chain of pairs that can help eliminate candidates'
         ];
+        y += 15;
+        advancedTechniques.forEach(technique => {
+            const lines = doc.splitTextToSize(technique, 170);
+            lines.forEach(line => {
+                doc.text(line, 20, y);
+                y += 7;
+            });
+        });
+
+        // Add page break
+        doc.addPage();
+    }
+
+    addStepByStepSolution(doc, moves, stats) {
+        // Title
+        doc.setFontSize(16);
+        doc.text('Step-by-Step Solution', 20, 20);
+
+        // Solution Summary
+        doc.setFontSize(12);
+        doc.text('Solution Summary:', 20, 35);
+        doc.text(`Total Steps: ${stats.totalSteps}`, 25, 45);
         
-        let y = 75;
-        rules.forEach(rule => {
-            if (rule === '') {
-                y += 5; // Add extra space for empty lines
-            } else {
-                doc.text(rule, 20, y, { maxWidth: 170 });
-                y += rule.length > 50 ? 15 : 8;
+        doc.text('Techniques Used:', 25, 55);
+        let y = 65;
+        Object.entries(stats.strategy).forEach(([strategy, count]) => {
+            doc.text(`• ${strategy}: ${count} times`, 30, y);
+            y += 7;
+        });
+            
+        y += 10;
+        doc.text('Detailed Steps:', 20, y);
+        y += 10;
+
+        // Add each step
+        moves.forEach((move, index) => {
+            if (y > 250) {
+                doc.addPage();
+                y = 20;
             }
+
+            // Grey background for step
+            doc.setFillColor(240, 240, 240);
+            doc.rect(20, y, 170, 80, 'F');
+
+            // Step header
+            doc.setFontSize(12);
+            doc.text(`Step ${index + 1}`, 25, y + 10);
+
+            // Location and value
+            doc.text(`Location: Row ${move.row + 1}, Column ${move.col + 1} (Box ${Math.floor(move.row / 3) * 3 + Math.floor(move.col / 3) + 1})`, 25, y + 20);
+            doc.text(`Value Placed: ${move.value}`, 25, y + 30);
+            doc.text(`Strategy: ${move.technique || 'Logical Deduction'} (${move.difficulty || 'Advanced'})`, 25, y + 40);
+
+            // Reasoning
+            doc.text('Reasoning:', 25, y + 50);
+            doc.setFontSize(10);
+            doc.text('Place 3 based on remaining possibilities and elimination', 30, y + 57);
+
+            // Draw 3x3 grid visualization
+            this.draw3x3Grid(doc, move, y + 15, 120);
+
+            // Related cells
+            doc.setFontSize(10);
+            doc.text('Related cells: ' + move.relatedCells.join(', '), 25, y + 70, {
+                maxWidth: 160
+            });
+
+            y += 90;
         });
     }
 
-    addSolutionSteps(doc) {
-        // Start solution steps on a new page
-        doc.addPage();
-        doc.setFontSize(16);
-        doc.text('Step-by-Step Solution', 20, 20);
-        doc.setFontSize(12);
+    draw3x3Grid(doc, move, y, x) {
+        const cellSize = 15;
+        const gridSize = cellSize * 3;
 
-        try {
-            // Get all steps in chronological order
-            const allSteps = this.getAllSolutionSteps();
-            console.log(`Processing ${allSteps.length} solution steps`);
-            
-            let y = 35;
-            let currentPage = 1;
-            
-            // Add step count summary
-            const techniques = new Map();
-            allSteps.forEach(step => {
-                const technique = step.technique || 'basic_move';
-                techniques.set(technique, (techniques.get(technique) || 0) + 1);
-            });
-            
-            // Add summary section
-            doc.text('Solution Summary:', 20, y);
-            y += 10;
-            doc.text(`Total Steps: ${allSteps.length}`, 30, y);
-            y += 10;
-            doc.text('Techniques Used:', 30, y);
-            y += 10;
-            
-            // Add techniques summary
-            for (const [technique, count] of techniques) {
-                doc.text(`• ${this.formatTechniqueName(technique)}: ${count} times`, 40, y);
-                y += 8;
-            }
-            
-            y += 10;
-            doc.text('Detailed Steps:', 20, y);
-            y += 10;
+        // Draw outer box
+        doc.setDrawColor(0);
+        doc.setLineWidth(0.5);
+        doc.rect(x, y, gridSize, gridSize);
 
-            // Process each step
-            allSteps.forEach((step, index) => {
-                try {
-                    // Check if we need a new page
-                    if (y > 250) {
-                        doc.addPage();
-                        currentPage++;
-                        y = 20;
-                    }
-
-                    // Add step header with box number
-                    doc.setFillColor(240, 240, 240);
-                    doc.rect(15, y - 5, 180, 130, 'F');
-                    doc.setFontSize(14);
-                    doc.text(`Step ${index + 1}`, 20, y);
-                    doc.setFontSize(12);
-                    
-                    // Add location and value with box reference
-                    const boxNumber = Math.floor(step.row / 3) * 3 + Math.floor(step.col / 3) + 1;
-                    doc.text(`Location: Row ${step.row + 1}, Column ${step.col + 1} (Box ${boxNumber})`, 30, y + 7);
-                    doc.text(`Value Placed: ${step.value}`, 30, y + 14);
-                    
-                    // Add strategy used with difficulty level
-                    const strategy = step.strategy || 'Basic Move';
-                    const difficulty = step.difficulty || 'Basic';
-                    doc.text(`Strategy: ${strategy} (${difficulty})`, 30, y + 21);
-                    
-                    // Add reasoning with word wrap
-                    const reason = step.reason || 'Value placed based on game rules';
-                    doc.text('Reasoning:', 30, y + 28);
-                    const splitReason = doc.splitTextToSize(reason, 150);
-                    doc.text(splitReason, 40, y + 35);
-                    
-                    // Add visual representation of the move
-                    this.addMoveVisualization(doc, step, y + 50);
-                    
-                    // Add related cells explanation if available
-                    if (step.relatedCells && step.relatedCells.length > 0) {
-                        const relatedCellsText = `Related cells: ${this.formatRelatedCells(step.relatedCells)}`;
-                        const splitRelatedCells = doc.splitTextToSize(relatedCellsText, 150);
-                        doc.text(splitRelatedCells, 30, y + 120);
-                    }
-                    
-                    // Add page number
-                    doc.setFontSize(10);
-                    doc.text(`Page ${currentPage}`, 180, 290);
-                    doc.setFontSize(12);
-                    
-                    y += 140; // Increased space for move visualization and related cells
-                } catch (error) {
-                    console.error(`Error processing step ${index}:`, error);
-                    // Continue with next step
-                }
-            });
-
-            // Add final statistics
-            doc.addPage();
-            currentPage++;
-            doc.setFontSize(16);
-            doc.text('Solution Statistics', 20, 20);
-            doc.setFontSize(12);
-            
-            const stats = this.calculateSolutionStats(allSteps);
-            let statsY = 40;
-            
-            doc.text('Difficulty Distribution:', 20, statsY);
-            statsY += 10;
-            for (const [difficulty, count] of Object.entries(stats.difficultyCount)) {
-                doc.text(`• ${difficulty}: ${count} moves (${Math.round(count/allSteps.length*100)}%)`, 30, statsY);
-                statsY += 8;
-            }
-            
-            statsY += 10;
-            doc.text('Strategy Distribution:', 20, statsY);
-            statsY += 10;
-            for (const [strategy, count] of Object.entries(stats.strategyCount)) {
-                doc.text(`• ${strategy}: ${count} times`, 30, statsY);
-                statsY += 8;
-            }
-            
-            // Add page number
-            doc.setFontSize(10);
-            doc.text(`Page ${currentPage}`, 180, 290);
-            
-        } catch (error) {
-            console.error('Error in addSolutionSteps:', error);
-            // Add error message to document
-            doc.text('An error occurred while generating the solution steps.', 20, 35);
-            doc.text('Please try again or contact support if the problem persists.', 20, 45);
+        // Draw grid lines
+        for (let i = 1; i < 3; i++) {
+            doc.line(x + (i * cellSize), y, x + (i * cellSize), y + gridSize);
+            doc.line(x, y + (i * cellSize), x + gridSize, y + (i * cellSize));
         }
-    }
 
-    getAllSolutionSteps() {
-        // Get all steps from the game's solution tracking
-        const allSteps = [];
-        
-        try {
-            // Get all steps in chronological order
-            const steps = this.game.getAllSolutionSteps();
-            console.log(`Found ${steps.length} solution steps`);
+        // Calculate box position
+        const boxRow = Math.floor(move.row / 3) * 3;
+        const boxCol = Math.floor(move.col / 3) * 3;
 
-            if (steps.length > 0) {
-                allSteps.push(...steps.map(step => ({
-                    ...step,
-                    technique: step.technique || 'basic_move',
-                    strategy: step.strategy || 'Basic Move',
-                    difficulty: step.difficulty || 'Basic',
-                    reason: step.reason || 'Value placed based on game rules',
-                    relatedCells: step.relatedCells || []
-                })));
-            } else {
-                console.log('No solution steps found, generating remaining steps...');
-                // If no steps are recorded, generate the remaining steps
-                const remainingSteps = this.game.generateRemainingSteps();
-                if (remainingSteps.length > 0) {
-                    allSteps.push(...remainingSteps);
-                }
-            }
-
-            console.log(`Total steps after processing: ${allSteps.length}`);
-        } catch (error) {
-            console.error('Error in getAllSolutionSteps:', error);
-        }
-        
-        return allSteps;
-    }
-
-    formatTechniqueName(technique) {
-        // Handle undefined or missing technique
-        if (!technique) {
-            return 'Basic Move';
-        }
-        
-        try {
-            return technique
-                .split('_')
-                .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-                .join(' ');
-        } catch (error) {
-            console.error('Error formatting technique name:', error);
-            return 'Basic Move';
-        }
-    }
-
-    formatRelatedCells(cells) {
-        return cells
-            .map(cell => `R${cell.row + 1}C${cell.col + 1}`)
-            .join(', ');
-    }
-
-    addMoveVisualization(doc, step, y) {
-        // Create a mini 3x3 grid showing the immediate area around the move
-        const boxSize = 15;
-        const startRow = Math.floor(step.row / 3) * 3;
-        const startCol = Math.floor(step.col / 3) * 3;
-        
-        // Draw title for the visualization
-        doc.text('Move Visualization:', 30, y - 5);
-        
-        // Set line width for grid
-        doc.setLineWidth(0.2);
-        
-        // Draw the outer border of the 3x3 box first
-        doc.rect(40, y, boxSize * 3, boxSize * 3);
-        
-        // Draw the 3x3 box with complete grid lines
+        // Fill cells
         for (let i = 0; i < 3; i++) {
             for (let j = 0; j < 3; j++) {
-                const x = 40 + (j * boxSize);
-                const cellY = y + (i * boxSize);
-                
-                // Draw complete cell borders
-                doc.rect(x, cellY, boxSize, boxSize);
-                
-                // Add numbers
-                const row = startRow + i;
-                const col = startCol + j;
-                const value = this.game.grid[row][col].value;
-                
-                // Determine cell style
-                const isCurrentMove = (row === step.row && col === step.col);
-                const isRelatedCell = step.relatedCells && step.relatedCells.some(cell => 
-                    cell.row === row && cell.col === col
-                );
-                
-                // Apply cell styling
-                if (isCurrentMove) {
-                    doc.setFillColor(200, 255, 200); // Light green for current move
-                    doc.rect(x, cellY, boxSize, boxSize, 'F');
-                } else if (isRelatedCell) {
-                    doc.setFillColor(255, 255, 200); // Light yellow for related cells
-                    doc.rect(x, cellY, boxSize, boxSize, 'F');
+                const cellX = x + (j * cellSize);
+                const cellY = y + (i * cellSize);
+                const value = this.game.grid[boxRow + i][boxCol + j].value;
+
+                // Highlight current move cell
+                if (boxRow + i === move.row && boxCol + j === move.col) {
+                    doc.setFillColor(200, 255, 200);
+                    doc.rect(cellX, cellY, cellSize, cellSize, 'F');
                 }
-                
-                // Redraw cell borders after fill to ensure they're visible
-                doc.rect(x, cellY, boxSize, boxSize);
-                
-                if (value !== 0) {
-                    // Use different colors for different types of numbers
-                    if (this.game.grid[row][col].isFixed) {
-                        doc.setTextColor(0, 0, 0); // Black for given numbers
-                    } else if (isCurrentMove) {
-                        doc.setTextColor(0, 100, 0); // Dark green for current move
-                    } else {
-                        doc.setTextColor(0, 0, 255); // Blue for previously placed numbers
-                    }
-                    
-                    doc.text(value.toString(), x + boxSize/2, cellY + boxSize/2, {
-                        align: 'center',
-                        baseline: 'middle'
-                    });
+
+                // Add number
+                if (value) {
+                    doc.setFontSize(12);
+                    doc.text(
+                        value.toString(),
+                        cellX + (cellSize / 2),
+                        cellY + (cellSize / 2) + 2,
+                        { align: 'center' }
+                    );
                 }
             }
         }
         
-        // Reset text color and line width
-        doc.setTextColor(0, 0, 0);
-        doc.setLineWidth(0.2);
-        
         // Add legend
-        const legendY = y + (3 * boxSize) + 10;
+        doc.setFontSize(8);
         doc.setFillColor(200, 255, 200);
-        doc.rect(40, legendY, 10, 10, 'F');
-        doc.rect(40, legendY, 10, 10); // Add border to legend box
-        doc.text('Current Move', 55, legendY + 7);
-        
+        doc.rect(x + gridSize + 5, y, 5, 5, 'F');
+        doc.text('Current Move', x + gridSize + 12, y + 4);
         doc.setFillColor(255, 255, 200);
-        doc.rect(100, legendY, 10, 10, 'F');
-        doc.rect(100, legendY, 10, 10); // Add border to legend box
-        doc.text('Related Cells', 115, legendY + 7);
+        doc.rect(x + gridSize + 5, y + 8, 5, 5, 'F');
+        doc.text('Related Cells', x + gridSize + 12, y + 12);
     }
 
-    async addFinalSnapshot(doc) {
+    addFinalPuzzle(doc) {
         doc.addPage();
         doc.setFontSize(16);
         doc.text('Final Solved Puzzle', 20, 20);
         
-        // Create a canvas to draw the final puzzle state
-        const canvas = document.createElement('canvas');
-        canvas.width = 450;
-        canvas.height = 450;
-        const ctx = canvas.getContext('2d');
-        
-        // Draw the grid
-        ctx.fillStyle = 'white';
-        ctx.fillRect(0, 0, 450, 450);
-        ctx.strokeStyle = 'black';
-        ctx.lineWidth = 2;
-        
-        // Draw cells
+        const cellSize = 20;
+        const gridSize = cellSize * 9;
+        const startX = 20;
+        const startY = 40;
+
+        // Draw main grid
+        doc.setLineWidth(0.5);
+        doc.rect(startX, startY, gridSize, gridSize);
+
+        // Draw 3x3 box borders
+        doc.setLineWidth(1);
+        for (let i = 0; i <= 9; i += 3) {
+            doc.line(startX + (i * cellSize), startY, startX + (i * cellSize), startY + gridSize);
+            doc.line(startX, startY + (i * cellSize), startX + gridSize, startY + (i * cellSize));
+        }
+
+        // Fill in numbers
+        doc.setFontSize(12);
         for (let i = 0; i < 9; i++) {
             for (let j = 0; j < 9; j++) {
-                const x = j * 50;
-                const y = i * 50;
-                ctx.strokeRect(x, y, 50, 50);
-                
-                // Draw numbers
                 const value = this.game.grid[i][j].value;
-                if (value !== 0) {
-                    ctx.font = '30px Arial';
-                    ctx.fillStyle = this.game.grid[i][j].isFixed ? 'black' : 'blue';
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'middle';
-                    ctx.fillText(value.toString(), x + 25, y + 25);
+                if (value) {
+                    const x = startX + (j * cellSize) + (cellSize / 2);
+                    const y = startY + (i * cellSize) + (cellSize / 2) + 2;
+                    
+                    // Use blue for non-fixed numbers
+                    if (!this.game.grid[i][j].isFixed) {
+                        doc.setTextColor(0, 0, 255);
+                    } else {
+                        doc.setTextColor(0);
+                    }
+                    
+                    doc.text(value.toString(), x, y, { align: 'center' });
                 }
             }
         }
-        
-        // Draw thicker lines for 3x3 boxes
-        ctx.lineWidth = 4;
-        for (let i = 0; i <= 9; i += 3) {
-            ctx.beginPath();
-            ctx.moveTo(i * 50, 0);
-            ctx.lineTo(i * 50, 450);
-            ctx.stroke();
-            
-            ctx.beginPath();
-            ctx.moveTo(0, i * 50);
-            ctx.lineTo(450, i * 50);
-            ctx.stroke();
-        }
-        
-        // Convert canvas to image and add to PDF
-        const imgData = canvas.toDataURL('image/png');
-        doc.addImage(imgData, 'PNG', 20, 40, 170, 170);
     }
 
     formatDate() {
@@ -421,24 +429,5 @@ class DocumentGenerator {
             hour: '2-digit',
             minute: '2-digit'
         }).replace(/[/:]/g, '-');
-    }
-
-    calculateSolutionStats(steps) {
-        const stats = {
-            difficultyCount: {},
-            strategyCount: {}
-        };
-        
-        steps.forEach(step => {
-            // Count difficulties
-            const difficulty = step.difficulty || 'Basic';
-            stats.difficultyCount[difficulty] = (stats.difficultyCount[difficulty] || 0) + 1;
-            
-            // Count strategies
-            const strategy = step.strategy || 'Basic Move';
-            stats.strategyCount[strategy] = (stats.strategyCount[strategy] || 0) + 1;
-        });
-        
-        return stats;
     }
 } 
