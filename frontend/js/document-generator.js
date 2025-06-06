@@ -3,9 +3,17 @@ class DocumentGenerator {
         this.game = game;
         // Store initial state when generator is created
         this.initialState = this.getInitialState();
-        // Add your Gemini API key here
-        this.GEMINI_API_KEY = 'AIzaSyDEWoJkI-DGyGQvVDpJ03YmX17XHcy26to';
-        this.GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${this.GEMINI_API_KEY}`;
+        
+        // Gemini API Configuration for 2.0 Flash
+        this.GEMINI_API_KEY = 'AIzaSyCcY30X95S7sXSlgM8lrgRZ5UykxWQrAn8';
+        this.GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash';
+        this.API_CONFIG = {
+            temperature: 0.4,  // Lower temperature for more focused responses
+            topK: 32,
+            topP: 0.8,
+            maxOutputTokens: 1024,  // Flash model has lower token limit
+            candidateCount: 1
+        };
     }
 
     getInitialState() {
@@ -30,9 +38,10 @@ class DocumentGenerator {
         const moves = this.getActualMoves();
         const stats = this.generateStatistics(moves);
         
-        // Generate each section in the new order
+        // Generate each section in the correct order
         this.addHowToPlaySection(doc);                  // First page with how to play
-        await this.addStepByStepSolution(doc, moves, stats);  // Steps with summary - now awaiting
+        await this.addStepByStepSolution(doc, moves);   // Steps with detailed analysis
+        this.addSolutionStatistics(doc, stats);         // Statistics before final puzzle
         this.addFinalPuzzle(doc);                      // Final puzzle at the end
         
         doc.save(`sudoku-solution-${this.formatDate()}.pdf`);
@@ -292,40 +301,10 @@ class DocumentGenerator {
         doc.addPage();
     }
 
-    async addStepByStepSolution(doc, moves, stats) {
-        // Title
+    async addStepByStepSolution(doc, moves) {
+        // Title for the section
         doc.setFontSize(16);
         doc.text('Step-by-Step Solution', 20, 20);
-
-        // Solution Summary
-        doc.setFontSize(12);
-        doc.text('Solution Summary:', 20, 35);
-        
-        // Total Steps with more spacing
-        doc.text(`Total Steps: ${stats.totalSteps}`, 20, 50);
-        
-        // Techniques Used with more spacing
-        doc.text('Techniques Used:', 20, 65);
-        let y = 80;
-        
-        // Format each technique with bullet points and more spacing between items
-        const techniques = [
-            ['Logical Deduction', stats.strategy['Logical Deduction']],
-            ['Naked Single', stats.strategy['Naked Single']],
-            ['Hidden Single Column', stats.strategy['Hidden Single Column']],
-            ['Hidden Single Row', stats.strategy['Hidden Single Row']],
-            ['Pointing Combination', stats.strategy['Pointing Combination']]
-        ];
-
-        techniques.forEach(([technique, count]) => {
-            doc.text(`• ${technique}: ${count} times`, 25, y);
-            y += 20;
-        });
-            
-        // Add detailed steps
-        y += 15;
-        doc.text('Detailed Steps:', 20, y);
-        y += 15;
 
         // Filter valid moves
         const validMoves = moves.filter(move => {
@@ -345,206 +324,305 @@ class DocumentGenerator {
             );
         });
 
-        // Add each valid step
+        // Add each valid step on a new page
         for (let i = 0; i < validMoves.length; i++) {
             const move = validMoves[i];
-            if (y > 250) {
-                doc.addPage();
-                y = 20;
-            }
-
+            
             // Get move analysis from Gemini
-            const currentGrid = this.getCurrentGridState(validMoves, i);
+            const currentGrid = this.getCurrentGridState(moves, i);
             const possibleMoves = this.getPossibleMoves(currentGrid);
             const analysis = await this.generateMoveAnalysis(move, currentGrid, possibleMoves);
 
-            // Grey background for step
-            doc.setFillColor(240, 240, 240);
-            doc.rect(20, y, 170, 140, 'F');  // Increased height for better spacing
+            // Start a new page for each step
+            if (i > 0) {
+                doc.addPage();
+            }
 
-            // Left side content (text)
-            const leftX = 25;  // Starting X for text content
-            let textY = y + 10;  // Starting Y for text content
+            // Add page header
+            doc.setFontSize(18);
+            doc.text(`Step ${i + 1}`, 20, 30);
 
-            // Step header
-            doc.setFontSize(12);
-            doc.text(`Step ${i + 1}`, leftX, textY);
-            textY += 15;
+            let currentY = 45;  // Starting Y position
+            const marginX = 20;  // Left margin
+            const pageWidth = 170;  // Width of content area
+            const minBoxHeight = 50;  // Minimum height of boxes
+            const boxPadding = 15;  // Padding inside boxes
 
-            // 1. The Move
-            doc.text(`Location: Row ${move.row + 1}, Column ${move.col + 1} (Box ${Math.floor(move.row / 3) * 3 + Math.floor(move.col / 3) + 1})`, leftX, textY);
-            textY += 15;
-            doc.text(`Value Placed: ${move.value}`, leftX, textY);
-            textY += 20;
+            // Move Details section with box
+            doc.setFillColor(245, 245, 245);
+            const moveDetailsHeight = 100;  // Fixed height for move details
+            doc.rect(marginX, currentY, pageWidth, moveDetailsHeight, 'F');
+            doc.setDrawColor(200, 200, 200);
+            doc.rect(marginX, currentY, pageWidth, moveDetailsHeight);
 
-            // 2. Move Explanation
-            doc.text('Move Explanation:', leftX, textY);
-            textY += 15;
-            doc.setFontSize(10);
-            const moveExplanation = doc.splitTextToSize(analysis.moveExplanation, 85);
-            moveExplanation.forEach(line => {
-                doc.text(line, leftX + 5, textY);
-                textY += 10;
+            doc.setFontSize(14);
+            doc.text('Move Details', marginX + 5, currentY + 15);
+            doc.setFontSize(11);
+            doc.text(`Location: Row ${move.row + 1}, Column ${move.col + 1} (Box ${Math.floor(move.row / 3) * 3 + Math.floor(move.col / 3) + 1})`, marginX + 10, currentY + 30);
+            doc.text(`Value Placed: ${move.value}`, marginX + 10, currentY + 45);
+            doc.text(`Technique Used: ${this.formatTechniqueName(move.technique)}`, marginX + 10, currentY + 60);
+
+            // Draw 3x3 grid on the right side of move details
+            this.draw3x3Grid(doc, move, currentY + 20, 120);
+
+            currentY += moveDetailsHeight + 15;  // Update Y position with spacing
+
+            // Move Explanation section
+            const moveExplanationLines = doc.splitTextToSize(analysis.moveExplanation, pageWidth - 20);
+            const moveExplanationHeight = Math.max(minBoxHeight, (moveExplanationLines.length * 7) + boxPadding * 2);
+
+                    // Check if we need a new page
+            if (currentY + moveExplanationHeight > 270) {
+                        doc.addPage();
+                currentY = 20;
+            }
+
+            doc.setFillColor(245, 245, 245);
+            doc.rect(marginX, currentY, pageWidth, moveExplanationHeight, 'F');
+            doc.setDrawColor(200, 200, 200);
+            doc.rect(marginX, currentY, pageWidth, moveExplanationHeight);
+
+                    doc.setFontSize(14);
+            doc.text('Move Explanation', marginX + 5, currentY + 15);
+            doc.setFontSize(11);
+            moveExplanationLines.forEach((line, index) => {
+                doc.text(line, marginX + 5, currentY + 30 + (index * 7));
             });
-            textY += 5;
 
-            // 3. Technique Explanation
-            doc.setFontSize(12);
-            doc.text('Technique Explanation:', leftX, textY);
-            textY += 15;
-            doc.setFontSize(10);
-            const techExplanation = doc.splitTextToSize(analysis.techniqueExplanation, 85);
-            techExplanation.forEach(line => {
-                doc.text(line, leftX + 5, textY);
-                textY += 10;
-            });
-            textY += 5;
+            currentY += moveExplanationHeight + 15;
 
-            // 4. Move Assessment
-            doc.setFontSize(12);
-            doc.text('Move Assessment:', leftX, textY);
-            textY += 15;
-            doc.setFontSize(10);
-            const assessmentText = analysis.moveAssessment.isOptimal 
-                ? analysis.moveAssessment.explanation
-                : `${analysis.moveAssessment.explanation}\nBetter move: ${this.formatBetterMove(analysis.moveAssessment.betterMove)}`;
-            const assessmentLines = doc.splitTextToSize(assessmentText, 85);
-            assessmentLines.forEach(line => {
-                doc.text(line, leftX + 5, textY);
-                textY += 10;
+            // Technique Details section
+            const techniqueLines = doc.splitTextToSize(analysis.techniqueExplanation, pageWidth - 20);
+            const techniqueHeight = Math.max(minBoxHeight, (techniqueLines.length * 7) + boxPadding * 2);
+
+            // Check if we need a new page
+            if (currentY + techniqueHeight > 270) {
+                doc.addPage();
+                currentY = 20;
+            }
+
+            doc.setFillColor(245, 245, 245);
+            doc.rect(marginX, currentY, pageWidth, techniqueHeight, 'F');
+            doc.setDrawColor(200, 200, 200);
+            doc.rect(marginX, currentY, pageWidth, techniqueHeight);
+
+            doc.setFontSize(14);
+            doc.text('Technique Details', marginX + 5, currentY + 15);
+            doc.setFontSize(11);
+            techniqueLines.forEach((line, index) => {
+                doc.text(line, marginX + 5, currentY + 30 + (index * 7));
             });
 
-            // Right side content (visual)
-            const rightX = 120;  // Starting X for visual content
-            const visualY = y + 15;  // Starting Y for visual content
+            currentY += techniqueHeight + 15;
 
-            // 5. Visual Representation
-            this.draw3x3Grid(doc, move, visualY, rightX);
-
-            // Single legend below the grid
-            doc.setFontSize(8);
-            const legendY = visualY + 70;  // Position legend below grid
+            // Move Assessment section
+            const assessmentLines = doc.splitTextToSize(analysis.moveAssessment.explanation, pageWidth - 20);
+            let assessmentHeight = Math.max(minBoxHeight, (assessmentLines.length * 7) + boxPadding * 2);
             
-            doc.setFillColor(200, 255, 200);
-            doc.rect(rightX, legendY, 8, 8, 'F');
-            doc.text('Current Move', rightX + 10, legendY + 6);
+            if (!analysis.moveAssessment.isOptimal && analysis.moveAssessment.betterMove) {
+                assessmentHeight += 60;  // Extra space for better move visualization
+            }
 
-            doc.setFillColor(255, 255, 200);
-            doc.rect(rightX, legendY + 10, 8, 8, 'F');
-            doc.text('Related Cells', rightX + 10, legendY + 16);
+            // Check if we need a new page
+            if (currentY + assessmentHeight > 270) {
+                doc.addPage();
+                currentY = 20;
+            }
 
-            // Related cells at the bottom
-            doc.setFontSize(9);
-            const relatedCellsText = doc.splitTextToSize('Related cells: ' + move.relatedCells.join(', '), 160);
-            relatedCellsText.forEach((line, index) => {
-                doc.text(line, leftX, y + 130 + (index * 10));
+            doc.setFillColor(245, 245, 245);
+            doc.rect(marginX, currentY, pageWidth, assessmentHeight, 'F');
+            doc.setDrawColor(200, 200, 200);
+            doc.rect(marginX, currentY, pageWidth, assessmentHeight);
+
+            doc.setFontSize(14);
+            doc.text('Move Assessment', marginX + 5, currentY + 15);
+            doc.setFontSize(11);
+            assessmentLines.forEach((line, index) => {
+                doc.text(line, marginX + 5, currentY + 30 + (index * 7));
             });
 
-            // Reset colors and move to next step
-            doc.setFillColor(240, 240, 240);
-            y += 150;  // Increased spacing between steps
-        }
+            if (!analysis.moveAssessment.isOptimal && analysis.moveAssessment.betterMove) {
+                const betterMove = analysis.moveAssessment.betterMove;
+                const betterMoveY = currentY + 30 + (assessmentLines.length * 7);
+                this.draw3x3Grid(doc, betterMove, betterMoveY, 120);
+            }
 
-        // Add Solution Statistics section
+            currentY += assessmentHeight + 15;
+
+            // Related Cells section
+            const relatedCellsText = doc.splitTextToSize(`Related Cells: ${move.relatedCells.join(', ')}`, pageWidth - 20);
+            const relatedCellsHeight = Math.max(minBoxHeight, (relatedCellsText.length * 7) + boxPadding * 2);
+
+            // Check if we need a new page
+            if (currentY + relatedCellsHeight > 270) {
+                doc.addPage();
+                currentY = 20;
+            }
+
+            doc.setFillColor(245, 245, 245);
+            doc.rect(marginX, currentY, pageWidth, relatedCellsHeight, 'F');
+            doc.setDrawColor(200, 200, 200);
+            doc.rect(marginX, currentY, pageWidth, relatedCellsHeight);
+
+            doc.setFontSize(14);
+            doc.text('Related Cells', marginX + 5, currentY + 15);
+            doc.setFontSize(11);
+            relatedCellsText.forEach((line, index) => {
+                doc.text(line, marginX + 5, currentY + 30 + (index * 7));
+            });
+
+            // Add page number at the bottom
+            doc.setFontSize(10);
+            doc.text(`Page ${doc.internal.getNumberOfPages()}`, 105, 285, { align: 'center' });
+        }
+    }
+
+    addSolutionStatistics(doc, stats) {
+        // Add new page for statistics
         doc.addPage();
+
+        // Title
         doc.setFontSize(16);
         doc.text('Solution Statistics', 20, 30);
 
-        // Difficulty Distribution
-        doc.setFontSize(12);
+        // Difficulty Distribution section
+        doc.setFontSize(14);
         doc.text('Difficulty Distribution:', 20, 50);
-        y = 65;
-
-        const totalMoves = stats.totalSteps;
-        const difficultyStats = [
+        
+        let y = 70;
+        
+        // Format difficulty stats with proper counts and percentages
+        const difficulties = [
             ['Advanced', stats.difficulty['Advanced']],
-            ['Basic', stats.difficulty['Basic']],
-            ['Intermediate', stats.difficulty['Intermediate']]
+            ['Intermediate', stats.difficulty['Intermediate']],
+            ['Basic', stats.difficulty['Basic']]
         ];
 
-        difficultyStats.forEach(([level, count]) => {
-            const percentage = Math.round((count / totalMoves) * 100);
-            doc.text(`• ${level}: ${count} moves (${percentage}%)`, 25, y);
-            y += 15;
+        difficulties.forEach(([level, count]) => {
+            if (count > 0) {
+                const percentage = Math.round((count / stats.totalSteps) * 100);
+                doc.setFontSize(11);
+                doc.text(`• ${level}: ${count} moves (${percentage}%)`, 25, y);
+                y += 15;
+            }
         });
 
-        // Strategy Distribution
+        // Strategy Distribution section
         y += 10;
+        doc.setFontSize(14);
         doc.text('Strategy Distribution:', 20, y);
-        y += 15;
+        y += 20;
 
-        const strategyStats = [
-            ['Logical Deduction', stats.strategy['Logical Deduction']],
+        // Format strategy stats with counts
+        const strategies = [
             ['Naked Single', stats.strategy['Naked Single']],
-            ['Hidden Single (Column)', stats.strategy['Hidden Single Column']],
-            ['Hidden Single (Row)', stats.strategy['Hidden Single Row']],
-            ['Pointing Combination', stats.strategy['Pointing Combination']]
+            ['Hidden Single Column', stats.strategy['Hidden Single Column']],
+            ['Hidden Single Row', stats.strategy['Hidden Single Row']],
+            ['Pointing Combination', stats.strategy['Pointing Combination']],
+            ['Logical Deduction', stats.strategy['Logical Deduction']]
         ];
 
-        strategyStats.forEach(([strategy, count]) => {
-            doc.text(`• ${strategy}: ${count} times`, 25, y);
-            y += 15;
+        strategies.forEach(([strategy, count]) => {
+            if (count > 0) {
+                doc.setFontSize(11);
+                doc.text(`• ${strategy}: ${count} times`, 25, y);
+                y += 15;
+            }
         });
+
+        // Add Technique Details section
+        y += 10;
+        doc.setFontSize(14);
+        doc.text('Technique Details', 20, y);
+        y += 20;
+
+        // Add technique explanations
+        doc.setFontSize(11);
+        const techniques = {
+            'Naked Single': 'A naked single occurs when a cell in the Sudoku grid has only one possible value that can be placed in it. This happens when all other numbers from 1 to 9 are already present in the same row, column, or 3x3 block as the cell in question. The remaining value is the only valid candidate for that cell.',
+            'Hidden Single': 'A hidden single occurs when a number can only be placed in one cell within a row, column, or box, even though that cell might have other possible values.',
+            'Pointing Combination': 'A pointing combination occurs when the possible positions for a number within a 3x3 box are restricted to a single row or column, eliminating that number as a possibility from other cells in the same row or column.',
+            'Logical Deduction': 'Using advanced logical reasoning to determine the correct number based on the relationships between different cells and existing patterns.'
+        };
+
+        Object.entries(techniques).forEach(([technique, explanation]) => {
+            const lines = doc.splitTextToSize(explanation, 170);
+            doc.text(lines, 25, y);
+            y += lines.length * 7 + 10;
+        });
+
+        // Add Move Assessment section if available
+        if (stats.moveAssessments && stats.moveAssessments.length > 0) {
+            y += 10;
+            doc.setFontSize(14);
+            doc.text('Move Assessment', 20, y);
+            y += 20;
+
+            doc.setFontSize(11);
+            stats.moveAssessments.forEach(assessment => {
+                const lines = doc.splitTextToSize(assessment, 170);
+                doc.text(lines, 25, y);
+                y += lines.length * 7 + 5;
+            });
+        }
+
+        // Add page number
+        doc.setFontSize(10);
+        doc.text(`Page ${doc.internal.getNumberOfPages()}`, 105, 285, { align: 'center' });
     }
 
     draw3x3Grid(doc, move, y, x) {
-        try {
-            const cellSize = 15;
-            const gridSize = cellSize * 3;
+        const cellSize = 20;  // Increased cell size
+        const gridSize = cellSize * 3;
+        
+        // Draw outer box with thicker border
+        doc.setDrawColor(0);
+        doc.setLineWidth(0.5);
+        doc.rect(x, y, gridSize, gridSize);
 
-            // Draw outer box
-            doc.setDrawColor(0);
-            doc.setLineWidth(0.5);
-            doc.rect(x, y, gridSize, gridSize);
+        // Draw grid lines
+        for (let i = 1; i < 3; i++) {
+            // Horizontal lines
+            doc.line(x, y + (i * cellSize), x + gridSize, y + (i * cellSize));
+            // Vertical lines
+            doc.line(x + (i * cellSize), y, x + (i * cellSize), y + gridSize);
+        }
 
-            // Draw grid lines
-            for (let i = 1; i < 3; i++) {
-                doc.line(x + (i * cellSize), y, x + (i * cellSize), y + gridSize);
-                doc.line(x, y + (i * cellSize), x + gridSize, y + (i * cellSize));
-            }
+        // Calculate box position
+        const boxRow = Math.floor(move.row / 3) * 3;
+        const boxCol = Math.floor(move.col / 3) * 3;
 
-            // Calculate box position
-            const boxRow = Math.floor(move.row / 3) * 3;
-            const boxCol = Math.floor(move.col / 3) * 3;
-            
-            // Fill cells
-            for (let i = 0; i < 3; i++) {
-                for (let j = 0; j < 3; j++) {
-                    const cellX = x + (j * cellSize);
-                    const cellY = y + (i * cellSize);
-                    const gridValue = this.game.grid[boxRow + i]?.[boxCol + j]?.value;
-                    
-                    // Highlight current move cell
-                    if (boxRow + i === move.row && boxCol + j === move.col) {
-                        doc.setFillColor(200, 255, 200);
-                        doc.rect(cellX, cellY, cellSize, cellSize, 'F');
-                    }
-                    
-                    // Add number if it exists
-                    if (gridValue) {
-                        doc.setFontSize(12);
-                        doc.text(
-                            gridValue.toString(),
-                            cellX + (cellSize / 2),
-                            cellY + (cellSize / 2) + 2,
-                            { align: 'center' }
-                        );
-                    }
+        // Fill cells
+        doc.setFontSize(14);  // Larger font for numbers
+        for (let i = 0; i < 3; i++) {
+            for (let j = 0; j < 3; j++) {
+                const cellX = x + (j * cellSize);
+                const cellY = y + (i * cellSize);
+                const gridValue = this.game.grid[boxRow + i]?.[boxCol + j]?.value;
+
+                // Highlight current move cell
+                if (boxRow + i === move.row && boxCol + j === move.col) {
+                    doc.setFillColor(200, 255, 200);  // Light green for current move
+                    doc.rect(cellX, cellY, cellSize, cellSize, 'F');
+                }
+
+                // Add number if it exists
+                if (gridValue) {
+                    doc.text(
+                        gridValue.toString(),
+                        cellX + (cellSize / 2),
+                        cellY + (cellSize / 2) + 2,
+                        { align: 'center' }
+                    );
                 }
             }
-            
-            // Add legend
-            doc.setFontSize(8);
-            doc.setFillColor(200, 255, 200);
-            doc.rect(x + gridSize + 5, y, 5, 5, 'F');
-            doc.text('Current Move', x + gridSize + 12, y + 4);
-            doc.setFillColor(255, 255, 200);
-            doc.rect(x + gridSize + 5, y + 8, 5, 5, 'F');
-            doc.text('Related Cells', x + gridSize + 12, y + 12);
-        } catch (error) {
-            console.error('Error drawing 3x3 grid:', error);
-            // Continue execution even if grid drawing fails
         }
+        
+        // Add legend
+        doc.setFontSize(8);
+        doc.setFillColor(200, 255, 200);
+        doc.rect(x, y + gridSize + 5, 8, 8, 'F');
+        doc.text('Current Move', x + 12, y + gridSize + 11);
     }
 
     addFinalPuzzle(doc) {
@@ -662,142 +740,219 @@ class DocumentGenerator {
     async generateMoveAnalysis(move, currentGrid, allPossibleMoves) {
         try {
             console.log('Generating analysis for move:', move);
-            const prompt = {
-                contents: [{
-                    parts: [{
-                        text: `Analyze this Sudoku move:
-                        Current Move: Value ${move.value} at Row ${move.row + 1}, Column ${move.col + 1}
-                        Technique Used: ${move.technique}
-                        Current Grid State: ${JSON.stringify(currentGrid)}
-                        All Possible Moves: ${JSON.stringify(allPossibleMoves)}
-                        
-                        Please provide:
-                        1. Specific explanation of why this number was placed in this cell
-                        2. Detailed explanation of how the ${move.technique} technique was applied here
-                        3. Assessment if this was the best move:
-                           - If optimal, explain why
-                           - If not optimal, what would have been better and why
-                        
-                        Format the response in JSON with these keys:
-                        {
-                            "moveExplanation": "",
-                            "techniqueExplanation": "",
-                            "moveAssessment": {
-                                "isOptimal": boolean,
-                                "explanation": "",
-                                "betterMove": null or { "value": n, "row": n, "col": n, "reason": "" }
-                            }
-                        }`
-                    }]
-                }]
-            };
-
-            console.log('Sending request to Gemini API...');
-            const response = await fetch(this.GEMINI_API_URL, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    contents: prompt.contents
-                })
-            });
-
-            if (!response.ok) {
-                console.error('API response not OK:', response.status, response.statusText);
-                const errorData = await response.text();
-                console.error('Error details:', errorData);
-                throw new Error(`Gemini API request failed: ${response.status} ${response.statusText}`);
-            }
-
-            const data = await response.json();
-            console.log('Received response from Gemini:', data);
             
-            if (!data.candidates || !data.candidates[0] || !data.candidates[0].content || !data.candidates[0].content.parts || !data.candidates[0].content.parts[0].text) {
-                throw new Error('Invalid response format from Gemini API');
-            }
+            // Create a more concise prompt for Flash model
+            const prompt = `Analyze this Sudoku move:
+Move: Value ${move.value} at Row ${move.row + 1}, Column ${move.col + 1}
+Technique: ${move.technique}
+Grid: ${JSON.stringify(currentGrid)}
+Available: ${JSON.stringify(allPossibleMoves)}
 
-            let analysisText = data.candidates[0].content.parts[0].text;
-            
-            // Remove markdown formatting if present
-            if (analysisText.includes('```json')) {
-                analysisText = analysisText.replace(/```json\n|\n```/g, '');
-            }
-            
-            // Clean up any remaining whitespace and ensure it's valid JSON
-            analysisText = analysisText.trim();
-            
-            try {
-                const analysis = JSON.parse(analysisText);
-                console.log('Parsed analysis:', analysis);
-                return analysis;
-            } catch (parseError) {
-                console.error('Error parsing analysis JSON:', parseError);
-                console.log('Raw analysis text:', analysisText);
-                // Return fallback analysis if parsing fails
-                return {
-                    moveExplanation: this.getDetailedMoveExplanation(move),
-                    techniqueExplanation: this.getDetailedTechniqueExplanation(move),
-                    moveAssessment: {
-                        isOptimal: true,
-                        explanation: this.getDetailedMoveAssessment(move),
-                        betterMove: null
+Provide JSON with:
+{
+    "moveExplanation": "why this move was made",
+    "techniqueExplanation": "how the technique works",
+    "moveAssessment": {
+        "isOptimal": boolean,
+        "explanation": "assessment of move quality",
+        "betterMove": null or {"value": n, "row": n, "col": n, "reason": "why better"}
+    }
+}`;
+
+            // Add retry logic for API calls
+            let retries = 3;
+            let analysisText = null;
+            let error = null;
+
+            while (retries > 0) {
+                try {
+                    analysisText = await this.callGeminiAPI(prompt);
+                    break;
+                } catch (e) {
+                    error = e;
+                    console.error('API call attempt failed:', e);
+                    retries--;
+                    if (retries > 0) {
+                        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second between retries
                     }
-                };
+                }
+            }
+
+            if (!analysisText) {
+                console.error('All API attempts failed:', error);
+                return this.generateFallbackAnalysis(move, currentGrid, allPossibleMoves);
+            }
+
+            try {
+                // Clean up the response text
+                analysisText = analysisText.replace(/```json\n|\n```/g, '').trim();
+                const analysis = JSON.parse(analysisText);
+                
+                // Validate the analysis structure
+                if (analysis.moveExplanation && 
+                    analysis.techniqueExplanation && 
+                    analysis.moveAssessment && 
+                    typeof analysis.moveAssessment.isOptimal === 'boolean' &&
+                    analysis.moveAssessment.explanation) {
+                    console.log('Successfully generated analysis:', analysis);
+                    return analysis;
+                } else {
+                    throw new Error('Invalid analysis structure');
+                }
+            } catch (parseError) {
+                console.error('Error parsing analysis:', parseError);
+                console.log('Raw analysis text:', analysisText);
+                return this.generateFallbackAnalysis(move, currentGrid, allPossibleMoves);
             }
         } catch (error) {
-            console.error('Error getting move analysis:', error);
-            // Return fallback analysis with more detailed explanations
-            return {
-                moveExplanation: this.getDetailedMoveExplanation(move),
-                techniqueExplanation: this.getDetailedTechniqueExplanation(move),
-                moveAssessment: {
-                    isOptimal: true,
-                    explanation: this.getDetailedMoveAssessment(move),
-                    betterMove: null
-                }
-            };
+            console.error('Error in generateMoveAnalysis:', error);
+            return this.generateFallbackAnalysis(move, currentGrid, allPossibleMoves);
         }
     }
 
-    getDetailedMoveExplanation(move) {
-        const technique = move.technique?.toLowerCase() || '';
-        if (technique === 'naked_single') {
-            return `Placed ${move.value} in this cell as it's the only possible number that can go here. All other numbers (1-9) are already present in either the same row, column, or 3x3 box.`;
-        } else if (technique === 'hidden_single_row') {
-            return `${move.value} must be placed in this cell because it's the only position in row ${move.row + 1} where ${move.value} can legally be placed. All other cells in this row cannot contain ${move.value} due to existing constraints.`;
-        } else if (technique === 'hidden_single_column') {
-            return `${move.value} must be placed in this cell because it's the only position in column ${move.col + 1} where ${move.value} can legally be placed. All other cells in this column cannot contain ${move.value} due to existing constraints.`;
-        } else if (technique === 'pointing_combination') {
-            return `${move.value} forms a pointing combination in this box, where ${move.value} can only appear in specific cells that align in a row or column, eliminating other possibilities.`;
+    generateFallbackAnalysis(move, currentGrid, allPossibleMoves) {
+        // Generate a detailed analysis without API
+        const boxRow = Math.floor(move.row / 3) * 3;
+        const boxCol = Math.floor(move.col / 3) * 3;
+        
+        // Analyze the constraints
+        const rowValues = currentGrid[move.row].filter(v => v !== 0);
+        const colValues = currentGrid.map(row => row[move.col]).filter(v => v !== 0);
+        const boxValues = [];
+        for (let i = 0; i < 3; i++) {
+            for (let j = 0; j < 3; j++) {
+                const value = currentGrid[boxRow + i][boxCol + j];
+                if (value !== 0) boxValues.push(value);
+            }
         }
-        return `Placed ${move.value} based on logical deduction and the current state of the puzzle.`;
+
+        // Find alternative moves
+        const alternativeMoves = allPossibleMoves.filter(possibleMove => 
+            possibleMove.possibilities.length === 1 &&
+            !(possibleMove.row === move.row && possibleMove.col === move.col)
+        );
+
+        // Analyze the impact of the move
+        const impactAnalysis = this.analyzeMoveImpact(move, currentGrid);
+        const isNakedSingle = alternativeMoves.length === 0;
+        const technique = move.technique?.toLowerCase() || '';
+        
+        // Generate detailed move explanation
+        const moveExplanation = `The value ${move.value} was placed in row ${move.row + 1}, column ${move.col + 1} based on the following analysis:
+
+1. Current Constraints:
+   - Row ${move.row + 1} already contains: ${rowValues.join(', ')}
+   - Column ${move.col + 1} already contains: ${colValues.join(', ')}
+   - Box ${Math.floor(move.row / 3) * 3 + Math.floor(move.col / 3) + 1} already contains: ${boxValues.join(', ')}
+
+2. Impact Analysis:
+   - This move affects ${impactAnalysis.affectedCells} cells
+   - It eliminates ${impactAnalysis.eliminatedPossibilities} possibilities
+   - Creates ${impactAnalysis.newConstraints} new constraints
+
+3. Strategic Value:
+   - ${impactAnalysis.strategicValue}`;
+
+        // Generate technique explanation
+        const techniqueExplanation = this.getDetailedTechniqueExplanation(move);
+
+        // Determine if this was the optimal move
+        const isOptimal = isNakedSingle || 
+                         technique.includes('hidden_single') || 
+                         (impactAnalysis.impactScore > 0.7 && alternativeMoves.length === 0);
+        
+        // Generate move assessment
+        const moveAssessment = {
+            isOptimal,
+            explanation: isOptimal ? 
+                `This was the optimal move because:
+1. ${isNakedSingle ? 'It was the only possible value for this cell' : 'It uses a strong solving technique'}
+2. Impact Score: ${impactAnalysis.impactScore.toFixed(2)} out of 1.0
+3. ${impactAnalysis.strategicValue}
+4. The move creates immediate progress and helps constrain ${impactAnalysis.affectedCells} other cells in the grid.` :
+                `While this move is valid, there are more strategic options available:
+1. Current Impact Score: ${impactAnalysis.impactScore.toFixed(2)} out of 1.0
+2. ${impactAnalysis.strategicValue}
+3. There are alternative moves that could lead to faster puzzle resolution.`,
+            betterMove: !isOptimal && alternativeMoves.length > 0 ? {
+                value: alternativeMoves[0].possibilities[0],
+                row: alternativeMoves[0].row,
+                col: alternativeMoves[0].col,
+                reason: `A better move would be placing ${alternativeMoves[0].possibilities[0]} at row ${alternativeMoves[0].row + 1}, column ${alternativeMoves[0].col + 1} because:
+1. It would create more immediate constraints
+2. It would affect more cells (${this.getRelatedCells(alternativeMoves[0].row, alternativeMoves[0].col).length} cells)
+3. It could reveal hidden patterns in the puzzle
+4. It follows a more optimal solving strategy`
+            } : null
+        };
+
+        return {
+            moveExplanation,
+            techniqueExplanation,
+            moveAssessment
+        };
+    }
+
+    analyzeMoveImpact(move, currentGrid) {
+        const relatedCells = this.getRelatedCells(move.row, move.col);
+        let eliminatedPossibilities = 0;
+        let newConstraints = 0;
+        
+        // Count affected empty cells
+        const affectedCells = relatedCells.length;
+        
+        // Analyze impact on related cells
+        relatedCells.forEach(cellRef => {
+            const [row, col] = cellRef.match(/\d+/g).map(n => parseInt(n) - 1);
+            if (currentGrid[row][col] === 0) {
+                eliminatedPossibilities++;
+                if (this.getPossibleValues(currentGrid, row, col).size === 2) {
+                    newConstraints++;
+                }
+            }
+        });
+        
+        // Calculate impact score (0 to 1)
+        const impactScore = (eliminatedPossibilities / 20) + (newConstraints / 10);
+        
+        // Generate strategic value assessment
+        let strategicValue = '';
+        if (impactScore > 0.8) {
+            strategicValue = 'This move has exceptional strategic value, creating multiple strong constraints.';
+        } else if (impactScore > 0.6) {
+            strategicValue = 'This move has good strategic value, affecting multiple cells and creating new constraints.';
+        } else if (impactScore > 0.4) {
+            strategicValue = 'This move has moderate strategic value, making steady progress in the puzzle.';
+        } else {
+            strategicValue = 'This move has basic strategic value, following fundamental Sudoku rules.';
+        }
+        
+        return {
+            affectedCells,
+            eliminatedPossibilities,
+            newConstraints,
+            impactScore,
+            strategicValue
+        };
     }
 
     getDetailedTechniqueExplanation(move) {
         const technique = move.technique?.toLowerCase() || '';
-        if (technique === 'naked_single') {
-            return `A Naked Single occurs when a cell has only one possible number that can be placed in it. This happens when all other numbers from 1-9 are already present in the cell's row, column, or 3x3 box, leaving only one valid option.`;
-        } else if (technique === 'hidden_single_row') {
-            return `A Hidden Single in a row occurs when a number can only be placed in one specific cell within that row, even though the cell might have other possible numbers. This is because all other cells in the row cannot contain this number due to existing placements.`;
-        } else if (technique === 'hidden_single_column') {
-            return `A Hidden Single in a column occurs when a number can only be placed in one specific cell within that column, even though the cell might have other possible numbers. This is because all other cells in the column cannot contain this number due to existing placements.`;
-        } else if (technique === 'pointing_combination') {
-            return `A Pointing Combination occurs when a number's possible positions within a box are restricted to a single row or column. This means the number cannot appear in that same row or column outside the box.`;
-        }
-        return `This move uses logical deduction to determine the correct number based on the current state of the puzzle and the relationships between different cells.`;
-    }
-
-    getDetailedMoveAssessment(move) {
-        const technique = move.technique?.toLowerCase() || '';
-        if (technique === 'naked_single') {
-            return `This was an optimal move because it's the only possible number for this cell. No other moves could be more straightforward or certain.`;
-        } else if (technique.includes('hidden_single')) {
-            return `This was a good strategic move as it identifies a hidden single, which is one of the fundamental solving techniques in Sudoku. This move helps reduce possibilities in related cells.`;
-        } else if (technique === 'pointing_combination') {
-            return `This was an advanced move that effectively reduces possibilities in multiple cells. It's a strong strategic choice that helps progress toward the solution.`;
-        }
-        return `This move follows logical deduction principles and contributes to solving the puzzle systematically.`;
+        const explanations = {
+            'naked_single': `A Naked Single is the most basic Sudoku technique where a cell has only one possible value. This occurs when all other numbers (1-9) are eliminated by existing values in the same row, column, or 3x3 box. In this case, cell (${move.row + 1}, ${move.col + 1}) could only contain ${move.value} because all other numbers were eliminated by the constraints.`,
+            
+            'hidden_single_row': `A Hidden Single in a row occurs when a number can only appear in one cell within a row, even though that cell might have other possible values. Here, ${move.value} could only be placed in column ${move.col + 1} of row ${move.row + 1} because all other positions in this row were blocked by existing numbers or constraints.`,
+            
+            'hidden_single_column': `A Hidden Single in a column occurs when a number can only appear in one cell within a column, even though that cell might have other possible values. In this case, ${move.value} could only be placed in row ${move.row + 1} of column ${move.col + 1} because all other positions in this column were blocked by existing numbers or constraints.`,
+            
+            'pointing_combination': `A Pointing Combination occurs when the possible positions for a number within a 3x3 box are restricted to a single row or column. This creates a powerful constraint that eliminates that number as a possibility from other cells in the same row or column outside the box. Here, ${move.value} forms such a pattern in box ${Math.floor(move.row / 3) * 3 + Math.floor(move.col / 3) + 1}.`,
+            
+            'logical_deduction': `Logical Deduction involves analyzing the relationships between different cells and their candidates to determine where a number must be placed. This move places ${move.value} in cell (${move.row + 1}, ${move.col + 1}) based on the current state of the puzzle and the constraints it creates.`,
+            
+            'player_move': `This move was made through careful analysis of the puzzle state and application of Sudoku rules. The placement of ${move.value} in cell (${move.row + 1}, ${move.col + 1}) follows from considering the existing numbers and their implications for possible placements.`
+        };
+        
+        return explanations[technique] || explanations['logical_deduction'];
     }
 
     wrapText(doc, text, x, y, maxWidth) {
@@ -874,5 +1029,55 @@ class DocumentGenerator {
         }
         
         return possibilities;
+    }
+
+    async callGeminiAPI(prompt) {
+        try {
+            console.log('Calling Gemini 2.0 Flash API with prompt:', prompt);
+            
+            const requestBody = {
+                contents: [{
+                    parts: [{
+                        text: prompt
+                    }]
+                }],
+                generationConfig: this.API_CONFIG
+            };
+
+            console.log('Request body:', JSON.stringify(requestBody, null, 2));
+            
+            const response = await fetch(`${this.GEMINI_API_URL}:generateContent?key=${this.GEMINI_API_KEY}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(requestBody)
+            });
+
+            if (!response.ok) {
+                const errorData = await response.text();
+                console.error('API Error Details:', {
+                    status: response.status,
+                    statusText: response.statusText,
+                    error: errorData,
+                    url: `${this.GEMINI_API_URL}:generateContent`,
+                    requestBody: requestBody
+                });
+                throw new Error(`API request failed: ${response.status} ${response.statusText}\n${errorData}`);
+            }
+
+            const data = await response.json();
+            console.log('API Response:', data);
+
+            if (!data.candidates?.[0]?.content?.parts?.[0]?.text) {
+                console.error('Invalid API Response Format:', data);
+                throw new Error('Invalid response format from API');
+            }
+
+            return data.candidates[0].content.parts[0].text;
+        } catch (error) {
+            console.error('Error calling Gemini API:', error);
+            throw error;
+        }
     }
 } 
