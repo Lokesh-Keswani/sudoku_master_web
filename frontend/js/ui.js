@@ -88,21 +88,20 @@ class SudokuUI {
 
     setupCheckSolutionButton() {
         document.getElementById('check').addEventListener('click', async () => {
-            const result = await this.game.checkSolution();
-            console.log('Check solution result:', result); // Debug log
-            
-            if (result.solved) {
-                this.showMessage('Congratulations! Puzzle solved!');
-                this.timeElement.textContent = this.game.getFormattedTime();
-                this.disableGameControls();
-            } else if (result.showSolution && result.solutionPath) {
-                console.log('Showing solution panel with path:', result.solutionPath); // Debug log
-                this.showSolutionPanel(result.solutionPath);
-                this.showMessage('Here is the step-by-step solution');
-            } else {
-                this.showMessage('Keep trying! Click check again to see the solution.');
-            }
+            await this.checkPuzzleCompletion();
         });
+    }
+
+    async checkPuzzleCompletion() {
+        const result = await this.game.checkSolution();
+        if (result.solved) {
+            this.showMessage('Congratulations! Puzzle solved!', 'success');
+            this.showDownloadButton();
+        } else if (result.showSolution && result.solutionPath && result.solutionPath.length > 0) {
+            this.showSolutionPanel(result.solutionPath);
+        } else if (result.error) {
+            this.showMessage(result.error, 'error');
+        }
     }
 
     setupNotesButton() {
@@ -273,15 +272,26 @@ class SudokuUI {
         }
     }
 
-    showMessage(text, duration = 3000) {
-        this.messageElement.textContent = text;
-        this.messageElement.classList.add('show');
+    showMessage(text, type = 'info') {
+        const messageEl = document.getElementById('message');
+        if (!messageEl) return;
+        
+        messageEl.textContent = text;
+        messageEl.className = `message ${type}`;
+        messageEl.style.display = 'block';
+        
+        // Hide message after 3 seconds
         setTimeout(() => {
-            this.messageElement.classList.remove('show');
-        }, duration);
+            messageEl.style.display = 'none';
+        }, 3000);
     }
 
     showSolutionPanel(solutionPath) {
+        if (!solutionPath || solutionPath.length === 0) {
+            console.log('No solution path available');
+            return;
+        }
+
         console.log('Creating solution panel with path:', solutionPath);
         
         // Remove existing solution panel if any
@@ -523,5 +533,9 @@ class SudokuUI {
         document.getElementById('notes-mode').disabled = true;
         document.querySelectorAll('.number').forEach(btn => btn.disabled = true);
         document.getElementById('erase').disabled = true;
+    }
+
+    showDownloadButton() {
+        // Implementation of showDownloadButton method
     }
 }
