@@ -1,6 +1,6 @@
 # Sudoku Master Web
 
-A feature-rich web-based Sudoku game built with Python (FastAPI) backend and vanilla JavaScript frontend.
+A feature-rich web-based Sudoku game built with vanilla JavaScript.
 
 ## Features
 
@@ -15,56 +15,13 @@ A feature-rich web-based Sudoku game built with Python (FastAPI) backend and van
 - Conflict detection
 - Modern Material Design UI
 
-## Setup
+## Live Demo
 
-### Backend Setup
-
-1. Navigate to the backend directory:
-   ```bash
-   cd backend
-   ```
-
-2. Create a Python virtual environment:
-   ```bash
-   python -m venv venv
-   ```
-
-3. Activate the virtual environment:
-   - Windows:
-     ```bash
-     .\venv\Scripts\activate
-     ```
-   - Linux/Mac:
-     ```bash
-     source venv/bin/activate
-     ```
-
-4. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-5. Run the backend server:
-   ```bash
-   python run.py
-   ```
-
-The backend server will start at `http://localhost:8000`
-
-### Frontend Setup
-
-The frontend is built with vanilla JavaScript and doesn't require any build steps. Simply serve the frontend directory using any static file server. For development, you can use Python's built-in HTTP server:
-
-```bash
-cd frontend
-python -m http.server 3000
-```
-
-The frontend will be available at `http://localhost:3000`
+You can play the game directly at: https://[your-github-username].github.io/sudoku_master_web/
 
 ## How to Play
 
-1. Open `http://localhost:3000` in your web browser
+1. Visit the game website
 2. Select a difficulty level from the dropdown menu
 3. Click "New Game" to start a new puzzle
 4. Click a cell to select it
@@ -79,23 +36,35 @@ The frontend will be available at `http://localhost:3000`
 
 ```
 sudoku_master_web/
-├── backend/
-│   ├── app/
-│   │   ├── core/
-│   │   │   └── sudoku.py
-│   │   ├── routers/
-│   │   │   └── sudoku.py
-│   │   └── main.py
-│   ├── requirements.txt
-│   └── run.py
-└── frontend/
-    ├── index.html
-    ├── styles.css
-    └── js/
-        ├── sudoku.js
-        ├── ui.js
-        └── app.js
+├── index.html
+├── frontend/
+│   ├── css/
+│   │   └── styles.css
+│   └── js/
+│       ├── sudoku.js
+│       ├── sudoku-ui.js
+│       ├── document-generator.js
+│       └── app.js
 ```
+
+### Local Development
+
+To run the game locally, you can use any static file server. For development, you can use Python's built-in HTTP server:
+
+```bash
+python -m http.server 3000
+```
+
+Then open `http://localhost:3000` in your web browser.
+
+## Deployment
+
+This project is hosted using GitHub Pages. To deploy your own version:
+
+1. Fork this repository
+2. Go to your fork's Settings > Pages
+3. Set the source branch to `main` (or `master`)
+4. Your site will be published at `https://[your-github-username].github.io/sudoku_master_web/`
 
 ## License
 
