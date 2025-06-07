@@ -12,7 +12,7 @@ class SudokuGame {
         this.difficulty = 'medium';
 
         // API URL - will be updated based on environment
-        this.apiUrl = 'https://sudoku-master-backend.onrender.com' || 'http://localhost:8000';
+        this.apiUrl = 'https://sudoku-master-web-backend.onrender.com';
 
         // UI state
         this.selectedCell = null;
@@ -55,11 +55,19 @@ class SudokuGame {
         try {
             const response = await fetch(`${this.apiUrl}/api/sudoku/new`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                mode: 'cors',
+                credentials: 'omit',
                 body: JSON.stringify({ difficulty })
             });
 
-            if (!response.ok) throw new Error('Failed to start new game');
+            if (!response.ok) {
+                const errorData = await response.text();
+                throw new Error(`Server error: ${errorData}`);
+            }
 
             const data = await response.json();
 
