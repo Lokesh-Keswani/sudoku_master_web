@@ -11,6 +11,9 @@ class SudokuGame {
         this.solution = null;
         this.difficulty = 'medium';
 
+        // API URL - will be updated based on environment
+        this.apiUrl = 'https://sudoku-master-backend.onrender.com' || 'http://localhost:8000';
+
         // UI state
         this.selectedCell = null;
         this.isNotesMode = false;
@@ -50,7 +53,7 @@ class SudokuGame {
 
     async newGame(difficulty = 'medium') {
         try {
-            const response = await fetch('http://localhost:8000/api/sudoku/new', {
+            const response = await fetch(`${this.apiUrl}/api/sudoku/new`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ difficulty })
