@@ -110,6 +110,75 @@ class SudokuGame {
         return false;
     }
 
+    isComplete() {
+        // Check if all cells are filled
+        for (let row = 0; row < 9; row++) {
+            for (let col = 0; col < 9; col++) {
+                if (this.grid[row][col].value === 0) {
+                    return false; // Found an empty cell
+                }
+            }
+        }
+        
+        // Check if the current grid matches the solution
+        if (this.solution) {
+            for (let row = 0; row < 9; row++) {
+                for (let col = 0; col < 9; col++) {
+                    if (this.grid[row][col].value !== this.solution[row][col]) {
+                        return false; // Found a cell that doesn't match the solution
+                    }
+                }
+            }
+            return true; // All cells match the solution
+        }
+        
+        // If no solution is available, just check if the grid is valid
+        return this.isValidGrid(this.grid);
+    }
+    
+    isValidGrid(grid) {
+        // Check rows
+        for (let row = 0; row < 9; row++) {
+            const seen = new Set();
+            for (let col = 0; col < 9; col++) {
+                const value = grid[row][col].value || grid[row][col];
+                if (value === 0) continue;
+                if (seen.has(value)) return false;
+                seen.add(value);
+            }
+        }
+        
+        // Check columns
+        for (let col = 0; col < 9; col++) {
+            const seen = new Set();
+            for (let row = 0; row < 9; row++) {
+                const value = grid[row][col].value || grid[row][col];
+                if (value === 0) continue;
+                if (seen.has(value)) return false;
+                seen.add(value);
+            }
+        }
+        
+        // Check 3x3 boxes
+        for (let boxRow = 0; boxRow < 3; boxRow++) {
+            for (let boxCol = 0; boxCol < 3; boxCol++) {
+                const seen = new Set();
+                for (let row = 0; row < 3; row++) {
+                    for (let col = 0; col < 3; col++) {
+                        const actualRow = boxRow * 3 + row;
+                        const actualCol = boxCol * 3 + col;
+                        const value = grid[actualRow][actualCol].value || grid[actualRow][actualCol];
+                        if (value === 0) continue;
+                        if (seen.has(value)) return false;
+                        seen.add(value);
+                    }
+                }
+            }
+        }
+        
+        return true;
+    }
+
     isValidMove(row, col) {
         return this.grid[row] &&
             this.grid[row][col] &&
