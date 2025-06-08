@@ -4,29 +4,46 @@ class SudokuUI {
         this.gridElement = document.getElementById('sudoku-grid');
         this.timeElement = document.getElementById('time');
         this.messageElement = document.getElementById('message');
-        this.timerElement = document.getElementById('timer');
+        this.timerElement = document.getElementById('time');
         this.documentGenerator = new DocumentGenerator(game);
         this.selectedCell = null;
-        
+
         // Get UI elements
         this.generateDocButton = document.getElementById('generate-doc-button');
-        
+
         // Set up event listeners
         if (this.generateDocButton) {
             this.generateDocButton.addEventListener('click', () => {
                 this.documentGenerator.generateSolutionDocument();
             });
         }
-        
+
         this.setupEventListeners();
         this.updateUI();
-        
-        // Start timer update interval
-        setInterval(() => {
-            if (this.timerElement && !this.game.isCreating) {
-                this.timerElement.textContent = this.game.getFormattedTime();
+
+        // Initialize timer state
+        this.lastUpdateTime = Date.now();
+        this.elapsedTime = 0;
+        this.timerInterval = null;
+
+        // Start timer updates
+        this.startTimerUpdates();
+
+        // Listen for game state changes from the game
+        const originalNewGame = this.game.newGame.bind(this.game);
+        this.game.newGame = async (difficulty) => {
+            const result = await originalNewGame(difficulty);
+            if (result) {
+                this.resetTimer();
+                this.startTimerUpdates();
             }
-        }, 1000);
+            return result;
+        };
+
+        // Start with the timer if a game is in progress
+        if (!this.game.isCreating && this.game.startTime) {
+            this.startTimerUpdates();
+        }
     }
 
     setupEventListeners() {
@@ -41,7 +58,7 @@ class SudokuUI {
         this.setupNumberPad();
 
         const validateButton = document.getElementById('validate-button');
-        
+
         // Hide generate doc button initially
         if (this.generateDocButton) {
             this.generateDocButton.style.display = 'none';
@@ -49,20 +66,20 @@ class SudokuUI {
 
         validateButton.addEventListener('click', () => {
             if (!this.game.isCreating) return;
-            
+
             const validationResult = this.game.validateCustomPuzzle();
             this.showMessage(validationResult.message);
-            
+
             if (validationResult.isValid) {
                 if (this.game.finalizeCustomPuzzle()) {
                     validateButton.textContent = 'Validate Puzzle';
                     this.showMessage('Puzzle created successfully! You can now start playing.');
-                    
+
                     // Show generate doc button after successful puzzle creation
                     if (this.generateDocButton) {
                         this.generateDocButton.style.display = 'block';
                     }
-                    
+
                     this.updateUI();
                 }
             }
@@ -73,6 +90,17 @@ class SudokuUI {
         document.getElementById('new-game').addEventListener('click', () => {
             const difficulty = document.getElementById('difficulty').value;
             this.game.newGame(difficulty).then(() => {
+                // Reset the timer
+                this.resetTimer();
+                this.startTimerUpdates();
+                
+                // Re-enable all controls
+                this.enableGameControls();
+                
+                // Clear any existing messages
+                this.messageElement.textContent = '';
+                
+                // Render the new game
                 this.render();
                 this.showMessage(`New ${difficulty} game started!`);
             });
@@ -82,7 +110,7 @@ class SudokuUI {
     setupCreatePuzzleButton() {
         const createButton = document.getElementById('create-puzzle');
         const startGameButton = document.getElementById('start-game');
-        
+
         createButton.addEventListener('click', () => {
             this.isCreationMode = true;
             this.game.startPuzzleCreation();
@@ -134,21 +162,21 @@ class SudokuUI {
             console.log('Check button found'); // Debug log
             checkButton.addEventListener('click', async () => {
                 console.log('Check button clicked'); // Debug log
-            const result = await this.game.checkSolution();
+                const result = await this.game.checkSolution();
                 console.log('Check result:', result); // Debug log
-                
-            if (result.solved) {
-                this.showMessage('Congratulations! Puzzle solved!');
+
+                if (result.solved) {
+                    this.showMessage('Congratulations! Puzzle solved!');
                     this.timeElement.textContent = this.game.getFormattedTime();
                     this.disableGameControls();
                     this.showDownloadButton();
                 } else if (result.showSolution && result.solutionPath) {
-                this.showSolutionPanel(result.solutionPath);
+                    this.showSolutionPanel(result.solutionPath);
                     this.showMessage('Here is the step-by-step solution');
-            } else {
+                } else {
                     this.showMessage('Keep trying! Click check again to see the solution.');
-            }
-        });
+                }
+            });
         } else {
             console.error('Check button not found in DOM'); // Debug log
         }
@@ -192,26 +220,26 @@ class SudokuUI {
     }
 
     setupNumberPad() {
+        // Add event listeners for number pad buttons
         document.querySelectorAll('.number').forEach(button => {
-            button.addEventListener('click', () => {
-                const value = parseInt(button.dataset.number);
+            button.addEventListener('click', async () => {
+                const number = parseInt(button.dataset.number);
                 if (this.game.selectedCell) {
-                    this.game.makeMove(value).then(valid => {
-                        if (valid) {
-                            this.render();
-                        } else {
-                            this.showMessage('Invalid move!');
+                    const valid = await this.game.makeMove(number);
+                    if (valid) {
+                        this.render();
+                        if (this.checkWin()) {
+                            this.showMessage('Congratulations! You solved the puzzle!');
+                            this.disableGameControls();
                         }
-                    });
+                    } else {
+                        this.showMessage('Invalid move!');
+                    }
+                } else {
+                    this.showMessage('Please select a cell first!');
                 }
             });
         });
-    }
-
-    setupTimerUpdate() {
-        setInterval(() => {
-            this.timeElement.textContent = this.game.getFormattedTime();
-        }, 1000);
     }
 
     setupDownloadButton() {
@@ -257,7 +285,7 @@ class SudokuUI {
         cell.dataset.col = col;
 
         const cellData = this.game.grid[row][col];
-        
+
         // Apply cell borders
         if (row % 3 === 0) cell.style.borderTop = '2px solid var(--grid-line-color)';
         if (col % 3 === 0) cell.style.borderLeft = '2px solid var(--grid-line-color)';
@@ -372,22 +400,109 @@ class SudokuUI {
         }
     }
 
-    showMessage(text, duration = 3000) {
-        console.log('Showing message:', text); // Debug log
-        if (this.messageElement) {
-        this.messageElement.textContent = text;
+    showMessage(message, duration = 3000) {
+        if (!this.messageElement) return;
+        
+        // Clear any existing timeout
+        if (this.messageTimeout) {
+            clearTimeout(this.messageTimeout);
+        }
+        
+        // Set the message and show it
+        this.messageElement.textContent = message;
         this.messageElement.classList.add('show');
-        setTimeout(() => {
+        
+        // Auto-hide after duration
+        this.messageTimeout = setTimeout(() => {
             this.messageElement.classList.remove('show');
         }, duration);
-        } else {
-            console.error('Message element not found'); // Debug log
+    }
+
+    checkWin() {
+        if (this.game.isComplete()) {
+            // Stop the timer when the game is won
+            if (this.timerInterval) {
+                clearInterval(this.timerInterval);
+                this.timerInterval = null;
+            }
+            
+            // Disable game controls
+            this.disableGameControls();
+            
+            // Show win message
+            this.showMessage('Congratulations! You solved the puzzle!', 5000);
+            
+            // Show download button if available
+            this.showDownloadButton();
+            
+            return true;
         }
+        return false;
+    }
+
+    disableGameControls() {
+        // Disable all number buttons
+        document.querySelectorAll('.number').forEach(button => {
+            button.disabled = true;
+        });
+        
+        // Disable other game controls
+        const controls = ['hint', 'check', 'notes', 'erase', 'undo', 'redo'];
+        controls.forEach(control => {
+            const element = document.getElementById(control);
+            if (element) {
+                element.disabled = true;
+            }
+        });
+    }
+
+    startTimerUpdates() {
+        // Clear any existing timer
+        this.stopTimer();
+        
+        // Start a new timer
+        this.timerInterval = setInterval(() => {
+            this.updateTimer();
+        }, 1000);
+        
+        // Initial update
+        this.updateTimer();
+    }
+    
+    stopTimer() {
+        if (this.timerInterval) {
+            clearInterval(this.timerInterval);
+            this.timerInterval = null;
+        }
+    }
+    
+    resetTimer() {
+        this.elapsedTime = 0;
+        this.lastUpdateTime = Date.now();
+        this.updateTimer();
+    }
+    
+    updateTimer() {
+        if (!this.timerElement) return;
+        
+        // Calculate elapsed time in seconds
+        const now = Date.now();
+        const delta = (now - this.lastUpdateTime) / 1000; // in seconds
+        this.elapsedTime += delta;
+        this.lastUpdateTime = now;
+        
+        // Format as MM:SS
+        const minutes = Math.floor(this.elapsedTime / 60);
+        const seconds = Math.floor(this.elapsedTime % 60);
+        const formattedTime = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        
+        // Update the timer display
+        this.timerElement.textContent = formattedTime;
     }
 
     showSolutionPanel(solutionPath) {
         console.log('Showing solution panel with path:', solutionPath); // Debug log
-        
+
         // Remove existing solution panel if any
         const existingPanel = document.querySelector('.solution-panel');
         if (existingPanel) {
@@ -396,53 +511,53 @@ class SudokuUI {
 
         const panel = document.createElement('div');
         panel.className = 'solution-panel';
-        
+
         const header = document.createElement('h3');
         header.textContent = 'Solution Steps';
         panel.appendChild(header);
 
         const content = document.createElement('div');
         content.className = 'solution-content';
-        
+
         const stepInfo = document.createElement('div');
         stepInfo.className = 'step-info';
         content.appendChild(stepInfo);
 
         const controls = document.createElement('div');
         controls.className = 'solution-controls';
-        
+
         const prevButton = document.createElement('button');
         prevButton.textContent = '← Previous Step';
         prevButton.className = 'solution-nav-button';
-        
+
         const nextButton = document.createElement('button');
         nextButton.textContent = 'Next Step →';
         nextButton.className = 'solution-nav-button';
-        
+
         const autoPlayButton = document.createElement('button');
         autoPlayButton.textContent = 'Auto Play';
         autoPlayButton.className = 'solution-auto-button';
-        
+
         let autoPlayInterval = null;
         let currentStepIndex = -1;
-        
+
         const showStep = (step) => {
             if (step) {
                 console.log('Showing step:', step); // Debug log
-                
+
                 // Get the technique and difficulty, with fallbacks
                 const technique = step.technique || step.strategy || 'Logical Deduction';
                 const difficulty = step.difficulty || 'Basic';
                 const reason = step.reason || 'Move made based on logical deduction';
-                
+
                 // Format the technique name
                 const formattedTechnique = technique.split('_')
                     .map(word => word.charAt(0).toUpperCase() + word.slice(1))
                     .join(' ');
-                
+
                 // Add difficulty class for styling
                 const difficultyClass = difficulty.toLowerCase().replace(/\s+/g, '-');
-                
+
                 stepInfo.innerHTML = `
                     <div class="step-header">
                         <span class="strategy-badge ${difficultyClass}">${formattedTechnique}</span>
@@ -525,12 +640,12 @@ class SudokuUI {
         controls.appendChild(prevButton);
         controls.appendChild(autoPlayButton);
         controls.appendChild(nextButton);
-        
+
         panel.appendChild(content);
         panel.appendChild(controls);
-        
+
         document.querySelector('.game-container').appendChild(panel);
-        
+
         // Show the first step
         if (solutionPath && solutionPath.length > 0) {
             currentStepIndex = 0;
@@ -559,7 +674,7 @@ class SudokuUI {
     setupCreationModeCell(cell, row, col) {
         cell.classList.add('editable');
         cell.tabIndex = 0; // Make cell focusable
-        
+
         // Handle keyboard input
         cell.addEventListener('keydown', (e) => {
             e.preventDefault();
@@ -626,9 +741,46 @@ class SudokuUI {
         // Update other UI elements as needed
     }
 
+    startTimerUpdates() {
+        // Clear any existing interval
+        if (this.timerInterval) {
+            clearInterval(this.timerInterval);
+        }
+        
+        // Start updating the timer display
+        this.timerInterval = setInterval(() => {
+            if (this.timerElement && this.game.startTime) {
+                const now = Date.now();
+                const elapsed = now - this.game.startTime;
+                const seconds = Math.floor(elapsed / 1000);
+                const minutes = Math.floor(seconds / 60);
+                const remainingSeconds = seconds % 60;
+                this.timerElement.textContent = 
+                    `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+            }
+        }, 1000);
+    }
+    
+    resetTimer() {
+        // Stop any running timer
+        if (this.timerInterval) {
+            clearInterval(this.timerInterval);
+            this.timerInterval = null;
+        }
+        
+        // Reset the display
+        if (this.timerElement) {
+            this.timerElement.textContent = '00:00';
+        }
+        
+        // Reset timer state
+        this.lastUpdateTime = Date.now();
+        this.elapsedTime = 0;
+    }
+
     updateTimer(time) {
         if (this.timerElement) {
-            this.timerElement.textContent = time;
+            document.getElementById("time").textContent = this.game.getFormattedTime();
         }
     }
 
