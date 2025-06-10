@@ -31,6 +31,7 @@ class DocumentGenerator {
 
     async generateSolutionDocument() {
         console.log('Starting document generation...');
+        this.initialState = this.getInitialState();
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF();
         
@@ -428,26 +429,34 @@ class DocumentGenerator {
         // Title
         doc.setFontSize(18);
         doc.text('Step-by-Step Solution', 20, 20);
+        
+        // Add the initial puzzle board
+        this.drawInitialPuzzle(doc, 30);
 
-        // Generation timestamp
-         doc.setFontSize(11);
-        doc.text(`Generated on ${this.formatDate()}`, 20, 40);
+        let currentY = 190;
 
         // Solution Summary
         doc.setFontSize(14);
-        doc.text('Solution Summary:', 20, 60);
+        doc.text('Solution Summary:', 20, currentY);
+        currentY += 15;
+
 
         // Description with proper spacing
         doc.setFontSize(11);
-        doc.text('This document contains a step-by-step breakdown of the solved Sudoku puzzle, including', 20, 80);
-        doc.text('logic used, explanation for each move, and how Sudoku works.', 20, 95);
+        doc.text('This document contains a step-by-step breakdown of the solved Sudoku puzzle, including', 20, currentY);
+        currentY += 10;
+        doc.text('logic used, explanation for each move, and how Sudoku works.', 20, currentY);
+        currentY += 15;
 
         // Total Steps
-        doc.text(`Total Steps: ${moves.length}`, 20, 115);
+        doc.text(`Total Steps: ${moves.length}`, 20, currentY);
+        currentY += 20;
 
         // Techniques Used section
         doc.setFontSize(14);
-        doc.text('Techniques Used:', 20, 135);
+        doc.text('Techniques Used:', 20, currentY);
+        currentY += 15;
+
 
         // Use the same strategy counts as in the statistics page
         const sortedStrategies = Object.entries(stats.strategy)
@@ -455,11 +464,11 @@ class DocumentGenerator {
 
         // Display techniques with counts and percentages
         doc.setFontSize(11);
-        let y = 155;
+        let y = currentY;
         sortedStrategies.forEach(([strategy, count]) => {
             const percent = Math.round((count / moves.length) * 100);
             doc.text(`• ${strategy}: ${count} moves (${percent}%)`, 25, y);
-                y += 15;
+                y += 10;
         });
 
         // Add page number
@@ -985,6 +994,50 @@ class DocumentGenerator {
         } catch (error) {
             console.error('Error calling Gemini API:', error);
             throw error;
+        }
+    }
+
+    drawInitialPuzzle(doc, startY) {
+        doc.setFontSize(14);
+        doc.text('Initial Puzzle', 20, startY);
+        
+        const cellSize = 15;
+        const gridSize = cellSize * 9;
+        const startX = (210 - gridSize) / 2; // Center on A4
+        const yPos = startY + 10;
+
+        // Draw thin grid lines first
+        doc.setLineWidth(0.2);
+        doc.setDrawColor(0);
+        
+        for (let i = 0; i <= 9; i++) {
+            if (i % 3 !== 0) {
+                doc.line(startX, yPos + (i * cellSize), startX + gridSize, yPos + (i * cellSize));
+                doc.line(startX + (i * cellSize), yPos, startX + (i * cellSize), yPos + gridSize);
+            }
+        }
+
+        // Draw thick box borders
+        doc.setLineWidth(1);
+        for (let i = 0; i <= 9; i++) {
+            if (i % 3 === 0) {
+                doc.line(startX, yPos + (i * cellSize), startX + gridSize, yPos + (i * cellSize));
+                doc.line(startX + (i * cellSize), yPos, startX + (i * cellSize), yPos + gridSize);
+            }
+        }
+
+        // Fill in numbers
+        doc.setFontSize(10);
+        doc.setTextColor(0);
+        for (let i = 0; i < 9; i++) {
+            for (let j = 0; j < 9; j++) {
+                const value = this.initialState[i][j];
+                if (value) {
+                    const x = startX + (j * cellSize) + (cellSize / 2);
+                    const y = yPos + (i * cellSize) + (cellSize / 2) + 3;
+                    doc.text(value.toString(), x, y, { align: 'center' });
+                }
+            }
         }
     }
 } 

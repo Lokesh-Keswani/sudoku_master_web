@@ -19,7 +19,7 @@ class SudokuUI {
         }
 
         this.setupEventListeners();
-        this.updateUI();
+        this.render();
 
         // Initialize timer state
         this.lastUpdateTime = Date.now();
@@ -57,33 +57,10 @@ class SudokuUI {
         this.setupUndoRedoButtons();
         this.setupNumberPad();
 
-        const validateButton = document.getElementById('validate-button');
-
         // Hide generate doc button initially
         if (this.generateDocButton) {
             this.generateDocButton.style.display = 'none';
         }
-
-        validateButton.addEventListener('click', () => {
-            if (!this.game.isCreating) return;
-
-            const validationResult = this.game.validateCustomPuzzle();
-            this.showMessage(validationResult.message);
-
-            if (validationResult.isValid) {
-                if (this.game.finalizeCustomPuzzle()) {
-                    validateButton.textContent = 'Validate Puzzle';
-                    this.showMessage('Puzzle created successfully! You can now start playing.');
-
-                    // Show generate doc button after successful puzzle creation
-                    if (this.generateDocButton) {
-                        this.generateDocButton.style.display = 'block';
-                    }
-
-                    this.updateUI();
-                }
-            }
-        });
     }
 
     setupNewGameButton() {
@@ -172,7 +149,7 @@ class SudokuUI {
                     this.showDownloadButton();
                 } else if (result.showSolution && result.solutionPath) {
                     this.showSolutionPanel(result.solutionPath);
-                    this.showMessage('Here is the step-by-step solution');
+                    this.showMessage('Here is the step-by-step solution.');
                 } else {
                     this.showMessage('Keep trying! Click check again to see the solution.');
                 }
@@ -228,9 +205,11 @@ class SudokuUI {
                     const valid = await this.game.makeMove(number);
                     if (valid) {
                         this.render();
-                        if (this.checkWin()) {
+                        const result = await this.game.checkSolution();
+                        if (result.solved) {
                             this.showMessage('Congratulations! You solved the puzzle!');
                             this.disableGameControls();
+                            this.showDownloadButton();
                         }
                     } else {
                         this.showMessage('Invalid move!');
@@ -240,17 +219,6 @@ class SudokuUI {
                 }
             });
         });
-    }
-
-    setupDownloadButton() {
-        console.log('Showing download button...'); // Debug log
-        const downloadButton = document.getElementById('generate-doc-button');
-        if (downloadButton) {
-            downloadButton.style.display = 'block';
-            console.log('Download button display set to:', downloadButton.style.display); // Debug log
-        } else {
-            console.log('Download button not found in DOM'); // Debug log
-        }
     }
 
     showDownloadButton() {
@@ -447,7 +415,7 @@ class SudokuUI {
         });
         
         // Disable other game controls
-        const controls = ['hint', 'check', 'notes', 'erase', 'undo', 'redo'];
+        const controls = ['hint', 'check', 'notes-mode', 'erase', 'undo', 'redo'];
         controls.forEach(control => {
             const element = document.getElementById(control);
             if (element) {
@@ -653,15 +621,6 @@ class SudokuUI {
         }
     }
 
-    disableGameControls() {
-        document.getElementById('hint').disabled = true;
-        document.getElementById('check').disabled = true;
-        document.getElementById('notes-mode').disabled = true;
-        document.getElementById('erase').disabled = true;
-        document.getElementById('undo').disabled = true;
-        document.getElementById('redo').disabled = true;
-    }
-
     enableGameControls() {
         document.getElementById('hint').disabled = false;
         document.getElementById('check').disabled = false;
@@ -741,62 +700,10 @@ class SudokuUI {
         // Update other UI elements as needed
     }
 
-    startTimerUpdates() {
-        // Clear any existing interval
-        if (this.timerInterval) {
-            clearInterval(this.timerInterval);
-        }
-        
-        // Start updating the timer display
-        this.timerInterval = setInterval(() => {
-            if (this.timerElement && this.game.startTime) {
-                const now = Date.now();
-                const elapsed = now - this.game.startTime;
-                const seconds = Math.floor(elapsed / 1000);
-                const minutes = Math.floor(seconds / 60);
-                const remainingSeconds = seconds % 60;
-                this.timerElement.textContent = 
-                    `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
-            }
-        }, 1000);
-    }
-    
-    resetTimer() {
-        // Stop any running timer
-        if (this.timerInterval) {
-            clearInterval(this.timerInterval);
-            this.timerInterval = null;
-        }
-        
-        // Reset the display
-        if (this.timerElement) {
-            this.timerElement.textContent = '00:00';
-        }
-        
-        // Reset timer state
-        this.lastUpdateTime = Date.now();
-        this.elapsedTime = 0;
-    }
-
-    updateTimer(time) {
-        if (this.timerElement) {
-            document.getElementById("time").textContent = this.game.getFormattedTime();
-        }
-    }
-
     updateDocumentButtonVisibility() {
         const generateDocButton = document.getElementById('generate-doc-button');
         if (generateDocButton) {
             generateDocButton.style.display = this.game.isPlaying ? 'block' : 'none';
         }
-    }
-
-    checkWin() {
-        if (this.game.checkWin()) {
-            this.showMessage('Congratulations! Puzzle solved!');
-            this.showDownloadButton();
-            return true;
-        }
-        return false;
     }
 }
