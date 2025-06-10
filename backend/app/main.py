@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .routers import sudoku
+from fastapi.staticfiles import StaticFiles
 
 app = FastAPI(
     title="Sudoku Master API",
@@ -14,6 +15,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "http://127.0.0.1:5500",
+        "http://localhost:8000",
         "https://lokesh-keswani.github.io",
         "*"
     ],
@@ -25,6 +27,5 @@ app.add_middleware(
 # Include routers
 app.include_router(sudoku.router, prefix="/api/sudoku", tags=["Sudoku"])
 
-@app.get("/")
-async def root():
-    return {"message": "Welcome to Sudoku Master API"}
+# Serve static files from the frontend directory
+app.mount("/", StaticFiles(directory="../frontend", html=True), name="static")

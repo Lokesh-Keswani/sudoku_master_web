@@ -12,7 +12,7 @@ class SudokuGame {
         this.difficulty = 'medium';
 
         // API URL - will be updated based on environment
-        this.apiUrl = 'https://sudoku-master-web-backend.onrender.com';
+        this.apiUrl = 'http://localhost:8000';
 
         // UI state
         this.selectedCell = null;
@@ -1428,6 +1428,23 @@ class SudokuGame {
         const minutes = Math.floor(seconds / 60);
         const remainingSeconds = seconds % 60;
         return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+    }
+
+    getNumberCounts() {
+        const counts = {};
+        for (let i = 1; i <= 9; i++) {
+            counts[i] = 0;
+        }
+
+        for (let r = 0; r < 9; r++) {
+            for (let c = 0; c < 9; c++) {
+                const value = this.grid[r][c].value;
+                if (value >= 1 && value <= 9) {
+                    counts[value]++;
+                }
+            }
+        }
+        return counts;
     }
 
     // Add a dedicated erase method

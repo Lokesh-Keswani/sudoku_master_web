@@ -244,6 +244,7 @@ class SudokuUI {
         }
 
         this.updateHintButton();
+        this.updateNumberPad();
     }
 
     createCell(row, col) {
@@ -705,5 +706,31 @@ class SudokuUI {
         if (generateDocButton) {
             generateDocButton.style.display = this.game.isPlaying ? 'block' : 'none';
         }
+    }
+
+    updateNumberPad() {
+        const counts = this.game.getNumberCounts();
+        document.querySelectorAll('.numbers .number').forEach(button => {
+            const number = parseInt(button.dataset.number);
+            const count = counts[number] || 0;
+            const remaining = 9 - count;
+
+            let countElement = button.querySelector('.count');
+            if (!countElement) {
+                countElement = document.createElement('span');
+                countElement.className = 'count';
+                button.appendChild(countElement);
+            }
+
+            countElement.textContent = remaining;
+
+            if (remaining <= 0) {
+                button.disabled = true;
+                button.classList.add('completed');
+            } else {
+                button.disabled = false;
+                button.classList.remove('completed');
+            }
+        });
     }
 }

@@ -39,16 +39,21 @@ A feature-rich, web-based Sudoku game with a powerful PDF generation feature, bu
 
 ## Local Development
 
-To run the game and backend server locally:
+To run the game and backend server locally with a single command:
 
-1.  **Backend Setup**:
-    - Navigate to the `backend` directory: `cd backend`
-    - Install dependencies: `pip install -r requirements.txt`
-    - Run the server: `python run.py`
-    - The backend will be available at `http://localhost:8000`.
-
-2.  **Frontend Setup**:
-    - Open the `frontend/index.html` file directly in your browser or use a simple static file server.
+1.  **Navigate to the `backend` directory**:
+    ```bash
+    cd backend
+    ```
+2.  **Install dependencies**:
+    ```bash
+    pip install -r requirements.txt
+    ```
+3.  **Run the server**:
+    ```bash
+    python run.py
+    ```
+4.  **Open your browser** and go to `http://localhost:8000`. The entire application (frontend and backend) will be running.
 
 ## Deployment
 
