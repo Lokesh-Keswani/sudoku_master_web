@@ -1,21 +1,24 @@
 import numpy as np
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict, Set
 import random
+from itertools import combinations
 
 class SudokuGenerator:
     def __init__(self, size: int = 9):
         self.size = size
         self.box_size = int(np.sqrt(size))
+        self.difficulty_map = {
+            'easy': {'score': 1, 'clues': (36, 45)},
+            'medium': {'score': 2, 'clues': (30, 35)},
+            'hard': {'score': 3, 'clues': (26, 29)},
+            'expert': {'score': 4, 'clues': (22, 25)},
+            'master': {'score': 5, 'clues': (17, 21)}
+        }
         
     def generate_puzzle(self, difficulty: str) -> Tuple[List[List[int]], List[List[int]]]:
-        """Generate a Sudoku puzzle and its solution."""
-        # Generate a solved puzzle
+        """Generate a Sudoku puzzle and its solution based on logical difficulty."""
         solution = self._generate_solved_grid()
-        
-        # Create the puzzle by removing numbers
-        cells_to_remove = self._get_cells_to_remove(difficulty)
-        puzzle = self._create_puzzle(solution, cells_to_remove)
-        
+        puzzle = self._create_puzzle(solution, difficulty)
         return puzzle, solution
     
     def _generate_solved_grid(self) -> List[List[int]]:
@@ -71,28 +74,66 @@ class SudokuGenerator:
                     
         return True
     
-    def _get_cells_to_remove(self, difficulty: str) -> int:
-        """Determine how many cells to remove based on difficulty."""
-        difficulty_levels = {
-            'easy': 0.4,      # Remove 40% of cells
-            'medium': 0.5,    # Remove 50% of cells
-            'hard': 0.6,      # Remove 60% of cells
-            'expert': 0.7     # Remove 70% of cells
-        }
-        
-        ratio = difficulty_levels.get(difficulty.lower(), 0.5)
-        return int(self.size * self.size * ratio)
-    
-    def _create_puzzle(self, solution: List[List[int]], cells_to_remove: int) -> List[List[int]]:
-        """Create a puzzle by removing numbers from the solution."""
+    def _create_puzzle(self, solution: List[List[int]], difficulty: str) -> List[List[int]]:
+        """Create a puzzle by removing numbers until it reaches a target difficulty."""
         puzzle = [row[:] for row in solution]
-        cells = [(i, j) for i in range(self.size) for j in range(self.size)]
+        cells = list(np.ndindex(self.size, self.size))
         random.shuffle(cells)
         
-        for i, j in cells[:cells_to_remove]:
-            puzzle[i][j] = 0
+        target = self.difficulty_map.get(difficulty.lower(), self.difficulty_map['medium'])
+        
+        clues = self.size * self.size
+        
+        for r, c in cells:
+            if clues <= target['clues'][0]:
+                break 
             
+            temp_val = puzzle[r][c]
+            puzzle[r][c] = 0
+            clues -= 1
+            
+            puzzle_copy = [row[:] for row in puzzle]
+            if self._count_solutions(puzzle_copy) != 1:
+                puzzle[r][c] = temp_val
+                clues += 1
+        
         return puzzle
+
+    def _find_empty(self, grid: List[List[int]]) -> Optional[Tuple[int, int]]:
+        """Find an empty cell in the grid."""
+        for i in range(self.size):
+            for j in range(self.size):
+                if grid[i][j] == 0:
+                    return (i, j)
+        return None
+
+    def _count_solutions_recursive(self, grid: List[List[int]], count: list):
+        """Recursively count solutions using backtracking."""
+        if count[0] > 1: # Optimization: stop if more than one solution is found
+            return
+
+        empty = self._find_empty(grid)
+        if not empty:
+            count[0] += 1
+            return
+
+        row, col = empty
+        numbers_to_try = list(range(1, self.size + 1))
+        random.shuffle(numbers_to_try)
+        for num in numbers_to_try:
+            if self._is_valid(grid, row, col, num):
+                grid[row][col] = num
+                self._count_solutions_recursive(grid, count)
+                if count[0] > 1:
+                    grid[row][col] = 0 # Backtrack before returning
+                    return
+                grid[row][col] = 0 # Backtrack
+
+    def _count_solutions(self, grid: List[List[int]]) -> int:
+        """Wrapper to count the number of solutions for a grid."""
+        count = [0]
+        self._count_solutions_recursive(grid, count)
+        return count[0]
     
     def validate_move(self, grid: List[List[int]], row: int, col: int, num: int) -> bool:
         """Validate if a move is legal."""
@@ -140,261 +181,247 @@ class SudokuGenerator:
         best_move = moves[0]
         return (best_move['row'], best_move['col'], best_move['value'])
 
-    def get_optimal_moves(self, puzzle: List[List[int]], solution: List[List[int]], limit: int = 3) -> List[dict]:
-        """Get a list of optimal moves with explanations."""
-        moves = []
-        
-        # First look for cells that have only one possible value
-        for row in range(self.size):
-            for col in range(self.size):
-                if puzzle[row][col] == 0:
-                    possible_values = self._get_possible_values(puzzle, row, col)
-                    if len(possible_values) == 1:
-                        value = possible_values.pop()
-                        moves.append({
-                            'row': row,
-                            'col': col,
-                            'value': value,
-                            'reason': f"This cell can only be {value} as all other numbers are used in its row, column, or box",
-                            'difficulty': 1
-                        })
-                        
-        # Look for hidden singles in rows, columns, and boxes
-        if len(moves) < limit:
-            moves.extend(self._find_hidden_singles(puzzle))
-            
-        # If we still need more moves, look for pairs and triples
-        if len(moves) < limit:
-            moves.extend(self._find_naked_pairs(puzzle))
-            
-        # Sort moves by difficulty (easier moves first)
-        moves.sort(key=lambda x: x['difficulty'])
-        
-        # If we still don't have any moves, just give a correct move from the solution
-        if not moves:
-            empty_cells = [(i, j) for i in range(self.size) for j in range(self.size) if puzzle[i][j] == 0]
-            if empty_cells:
-                row, col = empty_cells[0]
-                moves.append({
-                    'row': row,
-                    'col': col,
-                    'value': solution[row][col],
-                    'reason': "This is the correct value for this cell",
-                    'difficulty': 3
-                })
-        
-        return moves[:limit]
-
-    def _get_possible_values(self, grid: List[List[int]], row: int, col: int) -> set:
-        """Get all possible values for a cell."""
-        values = set(range(1, self.size + 1))
-        
-        # Remove values from same row
-        values -= set(grid[row])
-        
-        # Remove values from same column
-        values -= set(grid[i][col] for i in range(self.size))
-        
-        # Remove values from same box
-        box_row, box_col = row - row % self.box_size, col - col % self.box_size
-        for i in range(self.box_size):
-            for j in range(self.box_size):
-                values.discard(grid[box_row + i][box_col + j])
-                
-        return values
-
-    def _find_hidden_singles(self, grid: List[List[int]]) -> List[dict]:
-        """Find cells that are the only possible position for a number in a row, column, or box."""
-        moves = []
-        
-        # Check rows
-        for row in range(self.size):
-            for value in range(1, self.size + 1):
-                possible_cols = []
-                for col in range(self.size):
-                    if grid[row][col] == 0 and self._is_valid(grid, row, col, value):
-                        possible_cols.append(col)
-                if len(possible_cols) == 1:
-                    moves.append({
-                        'row': row,
-                        'col': possible_cols[0],
-                        'value': value,
-                        'reason': f"This is the only cell in row {row + 1} where {value} can be placed",
-                        'difficulty': 2
-                    })
-                    
-        # Check columns
-        for col in range(self.size):
-            for value in range(1, self.size + 1):
-                possible_rows = []
-                for row in range(self.size):
-                    if grid[row][col] == 0 and self._is_valid(grid, row, col, value):
-                        possible_rows.append(row)
-                if len(possible_rows) == 1:
-                    moves.append({
-                        'row': possible_rows[0],
-                        'col': col,
-                        'value': value,
-                        'reason': f"This is the only cell in column {col + 1} where {value} can be placed",
-                        'difficulty': 2
-                    })
-        
-        return moves
-
-    def _find_naked_pairs(self, grid: List[List[int]]) -> List[dict]:
-        """Find naked pairs in rows and columns."""
-        moves = []
-        
-        # Check rows
-        for row in range(self.size):
-            empty_cells = [(row, col) for col in range(self.size) if grid[row][col] == 0]
-            for i, (_, col1) in enumerate(empty_cells):
-                poss1 = self._get_possible_values(grid, row, col1)
-                if len(poss1) == 2:
-                    for _, col2 in empty_cells[i+1:]:
-                        poss2 = self._get_possible_values(grid, row, col2)
-                        if poss1 == poss2:
-                            moves.append({
-                                'row': row,
-                                'col': col1,
-                                'value': min(poss1),
-                                'reason': f"Found a naked pair {poss1} in row {row + 1}",
-                                'difficulty': 3
-                            }) 
-
     def get_solution_path(self, puzzle: List[List[int]], solution: List[List[int]]) -> List[dict]:
-        """Get the complete solution path with explanations for each move."""
-        solution_path = []
-        current_grid = [row[:] for row in puzzle]
+        assessment = self._solve_and_assess(puzzle)
+        path = assessment['path']
         
-        while not self.is_solved(current_grid):
-            # Get next best moves using different strategies
-            moves = []
+        if not assessment['solved']: # Solver got stuck, fill rest from solution
+            grid = [row[:] for row in puzzle]
+            for move in path:
+                grid[move['row']][move['col']] = move['value']
             
-            # Strategy 1: Single candidates (cells with only one possible value)
-            for row in range(self.size):
-                for col in range(self.size):
-                    if current_grid[row][col] == 0:
-                        possible_values = self._get_possible_values(current_grid, row, col)
-                        if len(possible_values) == 1:
-                            value = possible_values.pop()
-                            moves.append({
-                                'row': row,
-                                'col': col,
-                                'value': value,
-                                'reason': f"This cell can only be {value} as all other numbers are used in its row, column, or box",
-                                'strategy': 'Single Candidate',
-                                'difficulty': 1
-                            })
+            for r in range(self.size):
+                for c in range(self.size):
+                    if grid[r][c] == 0:
+                        path.append({
+                            'row': r, 'col': c, 'value': solution[r][c],
+                            'strategy': 'Forced Move', 'difficulty': 5,
+                            'reason': 'Completing puzzle from solution.'
+                        })
+        
+        return path 
+
+    def get_optimal_moves(self, puzzle: List[List[int]], solution: List[List[int]], limit: int = 3) -> List[dict]:
+        assessment = self._solve_and_assess(puzzle)
+        path = assessment['path']
+        
+        if not path and not assessment['solved']: # If solver gets stuck, use solution
+            empty_cells = []
+            for r in range(self.size):
+                for c in range(self.size):
+                    if puzzle[r][c] == 0:
+                        empty_cells.append((r,c))
+            if empty_cells:
+                r, c = random.choice(empty_cells)
+                return [{
+                    'row': r, 'col': c, 'value': solution[r][c],
+                    'reason': "This is the correct value for this cell",
+                    'difficulty': 5
+                }]
+        
+        return path[:limit]
+
+    def _get_candidates(self, grid: List[List[int]]) -> Dict[Tuple[int, int], Set[int]]:
+        candidates = {}
+        for r in range(self.size):
+            for c in range(self.size):
+                if grid[r][c] == 0:
+                    possible = set(range(1, self.size + 1))
+                    # Row
+                    possible -= set(grid[r])
+                    # Col
+                    possible -= set(grid[i][c] for i in range(self.size))
+                    # Box
+                    box_r, box_c = r // self.box_size * self.box_size, c // self.box_size * self.box_size
+                    possible -= set(grid[br][bc] for br in range(box_r, box_r + self.box_size) for bc in range(box_c, box_c + self.box_size))
+                    candidates[(r, c)] = possible
+        return candidates
+    
+    def _apply_move(self, grid, candidates, r, c, val):
+        grid[r][c] = val
+        if (r,c) in candidates:
+            del candidates[(r, c)]
+        
+        # Eliminate from row
+        for col in range(self.size):
+            if (r, col) in candidates:
+                candidates[(r, col)].discard(val)
+
+        # Eliminate from col
+        for row in range(self.size):
+            if (row, c) in candidates:
+                candidates[(row, c)].discard(val)
+        
+        # Eliminate from box
+        box_r, box_c = r // self.box_size * self.box_size, c // self.box_size * self.box_size
+        for br in range(box_r, box_r + self.box_size):
+            for bc in range(box_c, box_c + self.box_size):
+                if (br, bc) in candidates:
+                    candidates[(br, bc)].discard(val)
+
+    def _find_naked_singles(self, candidates):
+        singles = []
+        for (r, c), possible in list(candidates.items()):
+            if len(possible) == 1:
+                val = possible.pop()
+                singles.append((r, c, val))
+                # Add it back for iteration safety, it will be removed by _apply_move
+                candidates[(r,c)] = {val}
+        return singles
+    
+    def _find_hidden_singles(self, candidates):
+        singles = []
+        # Rows, Cols, Boxes
+        for i in range(self.size):
+            # Row
+            row_counts = {num: [] for num in range(1, 10)}
+            # Col
+            col_counts = {num: [] for num in range(1, 10)}
+            # Box
+            box_r, box_c = (i // 3) * 3, (i % 3) * 3
+            box_counts = {num: [] for num in range(1, 10)}
             
-            # Strategy 2: Hidden singles in rows
-            if not moves:
-                for row in range(self.size):
-                    for value in range(1, self.size + 1):
-                        if value not in current_grid[row]:
-                            possible_cols = []
-                            for col in range(self.size):
-                                if current_grid[row][col] == 0 and self._is_valid(current_grid, row, col, value):
-                                    possible_cols.append(col)
-                            if len(possible_cols) == 1:
-                                moves.append({
-                                    'row': row,
-                                    'col': possible_cols[0],
-                                    'value': value,
-                                    'reason': f"In row {row + 1}, {value} can only go in this cell",
-                                    'strategy': 'Hidden Single in Row',
-                                    'difficulty': 2
-                                })
+            for j in range(self.size):
+                # Row Check
+                if (i, j) in candidates:
+                    for num in candidates[(i,j)]:
+                        row_counts[num].append((i,j))
+                # Col Check
+                if (j, i) in candidates:
+                    for num in candidates[(j,i)]:
+                        col_counts[num].append((j,i))
+                # Box Check
+                r, c = box_r + j // 3, box_c + j % 3
+                if (r, c) in candidates:
+                    for num in candidates[(r,c)]:
+                        box_counts[num].append((r,c))
 
-            # Strategy 3: Hidden singles in columns
-            if not moves:
-                for col in range(self.size):
-                    col_values = [current_grid[r][col] for r in range(self.size)]
-                    for value in range(1, self.size + 1):
-                        if value not in col_values:
-                            possible_rows = []
-                            for row in range(self.size):
-                                if current_grid[row][col] == 0 and self._is_valid(current_grid, row, col, value):
-                                    possible_rows.append(row)
-                            if len(possible_rows) == 1:
-                                moves.append({
-                                    'row': possible_rows[0],
-                                    'col': col,
-                                    'value': value,
-                                    'reason': f"In column {col + 1}, {value} can only go in this cell",
-                                    'strategy': 'Hidden Single in Column',
-                                    'difficulty': 2
-                                })
+            for counts in [row_counts, col_counts, box_counts]:
+                for num, cells in counts.items():
+                    if len(cells) == 1:
+                        r, c = cells[0]
+                        # Make sure it's not already a naked single
+                        if len(candidates.get((r,c), set())) > 1:
+                            # Check if not already found
+                            if not any(s[0] == r and s[1] == c for s in singles):
+                                singles.append((r, c, num))
+        
+        return singles
 
-            # Strategy 4: Hidden singles in boxes
-            if not moves:
-                for box in range(self.size):
-                    box_row = (box // 3) * 3
-                    box_col = (box % 3) * 3
-                    box_values = []
-                    for i in range(3):
-                        for j in range(3):
-                            box_values.append(current_grid[box_row + i][box_col + j])
-                    
-                    for value in range(1, self.size + 1):
-                        if value not in box_values:
-                            possible_positions = []
-                            for i in range(3):
-                                for j in range(3):
-                                    row = box_row + i
-                                    col = box_col + j
-                                    if current_grid[row][col] == 0 and self._is_valid(current_grid, row, col, value):
-                                        possible_positions.append((row, col))
-                            if len(possible_positions) == 1:
-                                row, col = possible_positions[0]
-                                moves.append({
-                                    'row': row,
-                                    'col': col,
-                                    'value': value,
-                                    'reason': f"In box {box + 1}, {value} can only go in this cell",
-                                    'strategy': 'Hidden Single in Box',
-                                    'difficulty': 2
-                                })
+    def _naked_pairs(self, candidates):
+        made_change = False
+        units = []
+        # Rows, Cols, Boxes
+        for i in range(self.size):
+            units.append([(i, c) for c in range(self.size)])
+            units.append([(r, i) for r in range(self.size)])
+            box_r, box_c = (i // 3) * 3, (i % 3) * 3
+            units.append([(box_r + r, box_c + c) for r in range(3) for c in range(3)])
 
-            # Strategy 5: Naked Pairs in rows
-            if not moves:
-                for row in range(self.size):
-                    empty_cells = [(row, col) for col in range(self.size) if current_grid[row][col] == 0]
-                    for i, (_, col1) in enumerate(empty_cells):
-                        poss1 = self._get_possible_values(current_grid, row, col1)
-                        if len(poss1) == 2:
-                            for _, col2 in empty_cells[i+1:]:
-                                poss2 = self._get_possible_values(current_grid, row, col2)
-                                if poss1 == poss2:
-                                    moves.append({
-                                        'row': row,
-                                        'col': col1,
-                                        'value': min(poss1),
-                                        'reason': f"Found a naked pair {poss1} in row {row + 1}",
-                                        'strategy': 'Naked Pair',
-                                        'difficulty': 3
-                                    })
+        for unit in units:
+            cells_in_unit = [cell for cell in unit if cell in candidates]
+            pairs = [cell for cell in cells_in_unit if len(candidates[cell]) == 2]
+            
+            for c1, c2 in combinations(pairs, 2):
+                if candidates[c1] == candidates[c2]:
+                    pair_vals = candidates[c1]
+                    for cell_to_clean in cells_in_unit:
+                        if cell_to_clean not in [c1, c2]:
+                            original_len = len(candidates[cell_to_clean])
+                            candidates[cell_to_clean] -= pair_vals
+                            if len(candidates[cell_to_clean]) != original_len:
+                                made_change = True
+        return made_change
+    
+    def _pointing_line(self, candidates):
+        made_change = False
+        for i in range(self.size): # Iterate through boxes
+            box_r, box_c = (i // 3) * 3, (i % 3) * 3
+            box_cells = [(box_r + r, box_c + c) for r in range(3) for c in range(3) if (box_r + r, box_c + c) in candidates]
+            
+            for num in range(1, 10):
+                num_cells = [cell for cell in box_cells if num in candidates[cell]]
+                if len(num_cells) > 1:
+                    # Check if they are all in the same row
+                    if all(c[0] == num_cells[0][0] for c in num_cells):
+                        row = num_cells[0][0]
+                        for col in range(self.size):
+                            if col // 3 != box_c // 3: # Outside the box
+                                if (row, col) in candidates and num in candidates[(row, col)]:
+                                    candidates[(row, col)].discard(num)
+                                    made_change = True
+                    # Check if they are all in the same col
+                    if all(c[1] == num_cells[0][1] for c in num_cells):
+                        col = num_cells[0][1]
+                        for row in range(self.size):
+                           if row // 3 != box_r // 3: # Outside the box
+                               if (row, col) in candidates and num in candidates[(row, col)]:
+                                   candidates[(row, col)].discard(num)
+                                   made_change = True
+        return made_change
 
-            # If no logical moves found, take the next move from solution
-            if not moves:
-                for row in range(self.size):
-                    for col in range(self.size):
-                        if current_grid[row][col] == 0:
-                            moves.append({
-                                'row': row,
-                                'col': col,
-                                'value': solution[row][col],
-                                'reason': "Next step in the solution",
-                                'strategy': 'Solution Step',
-                                'difficulty': 4
-                            })
-                            break
-                    if moves:
-                        break
+    def _box_line_reduction(self, candidates):
+        made_change = False
+        for i in range(self.size): # Iterate through rows and cols
+            # Row
+            row_cells = [(i, c) for c in range(self.size) if (i, c) in candidates]
+            # Col
+            col_cells = [(r, i) for r in range(self.size) if (r, i) in candidates]
 
-            # Apply the best move
-            best_move = min(moves, key=lambda x: x['difficulty'])
-            current_grid[best_move['row']][best_move['col']] = best_move['value']
-            solution_path.append(best_move)
+            for unit in [row_cells, col_cells]:
+                for num in range(1, 10):
+                    num_cells = [cell for cell in unit if num in candidates[cell]]
+                    if len(num_cells) > 1:
+                        # Check if they are all in same box
+                        box_idx = (num_cells[0][0] // 3, num_cells[0][1] // 3)
+                        if all((c[0] // 3, c[1] // 3) == box_idx for c in num_cells):
+                            box_r, box_c = box_idx[0] * 3, box_idx[1] * 3
+                            for r in range(box_r, box_r + 3):
+                                for c in range(box_c, box_c + 3):
+                                    if (r, c) in candidates and (r,c) not in num_cells:
+                                        if num in candidates[(r,c)]:
+                                            candidates[(r,c)].discard(num)
+                                            made_change = True
+        return made_change 
 
-        return solution_path 
+    def _solve_and_assess(self, puzzle: List[List[int]]):
+        grid = [row[:] for row in puzzle]
+        candidates = self._get_candidates(grid)
+        path = []
+        max_difficulty = 0
+
+        while True:
+            solved_cells_this_turn = []
+            
+            # --- Technique 1: Naked/Hidden Singles (Difficulty 1) ---
+            singles = self._find_naked_singles(candidates)
+            if not singles:
+                singles = self._find_hidden_singles(candidates)
+
+            if singles:
+                max_difficulty = max(max_difficulty, 1)
+                for r, c, val in singles:
+                    if grid[r][c] == 0: # Ensure not already processed
+                        path.append({'row': r, 'col': c, 'value': val, 'strategy': 'Single', 'difficulty': 1})
+                        self._apply_move(grid, candidates, r, c, val)
+                        solved_cells_this_turn.append((r,c,val))
+                if solved_cells_this_turn:
+                    continue
+
+            # --- Technique 2: Naked Pairs (Difficulty 2) ---
+            if self._naked_pairs(candidates):
+                max_difficulty = max(max_difficulty, 2)
+                continue
+
+            # --- Technique 3: Pointing/Reduction (Difficulty 3) ---
+            if self._pointing_line(candidates) or self._box_line_reduction(candidates):
+                max_difficulty = max(max_difficulty, 3)
+                continue
+            
+            break # No more techniques can be applied
+
+        is_solved = not self._find_empty(grid)
+        if not is_solved:
+             max_difficulty = 5 # Needs backtracking or harder techniques
+
+        return {"path": path, "max_difficulty": max_difficulty, "solved": is_solved} 

@@ -84,7 +84,16 @@ class SudokuGame {
             this.solution = data.solution;
             this.difficulty = difficulty;
             this.selectedCell = null;
-            this.hintsRemaining = 3;
+
+            const hint_levels = {
+                'easy': 5,
+                'medium': 4,
+                'hard': 3,
+                'expert': 2,
+                'master': 0
+            };
+            this.hintsRemaining = hint_levels[difficulty.toLowerCase()] || 4;
+
             this.checkCount = 0;
 
             // Clear history
