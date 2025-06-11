@@ -86,13 +86,29 @@ class SudokuGame {
             this.selectedCell = null;
 
             const hint_levels = {
-                'easy': 5,
-                'medium': 4,
-                'hard': 3,
-                'expert': 2,
+                'easy': 4,
+                'medium': 3,
+                'hard': 2,
+                'expert': 1,
                 'master': 0
             };
-            this.hintsRemaining = hint_levels[difficulty.toLowerCase()] || 4;
+            const key = difficulty.trim().toLowerCase();
+            this.hintsRemaining = hint_levels[key] !== undefined ? hint_levels[key] : 3;
+            if (hint_levels[key] === undefined) {
+                console.warn('Unknown difficulty:', difficulty);
+            }
+
+            // Disable hint button in Master mode
+            const hintButton = document.getElementById('hint');
+            if (hintButton) {
+                if (key === 'master') {
+                    hintButton.disabled = true;
+                    hintButton.title = "No hints available in Master mode";
+                } else {
+                    hintButton.disabled = false;
+                    hintButton.title = "";
+                }
+            }
 
             this.checkCount = 0;
 

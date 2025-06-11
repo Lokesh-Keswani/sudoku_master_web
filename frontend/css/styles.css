@@ -406,4 +406,13 @@ header .controls {
 
 .number-pad button.completed .count {
     display: none;
+}
+
+.controls button:disabled,
+button:disabled {
+    background-color: #b0b8c1 !important;
+    color: #e0e0e0 !important;
+    cursor: not-allowed !important;
+    opacity: 0.7 !important;
+    pointer-events: none !important;
 } 
