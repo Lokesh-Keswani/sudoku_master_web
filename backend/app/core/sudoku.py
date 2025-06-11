@@ -8,11 +8,11 @@ class SudokuGenerator:
         self.size = size
         self.box_size = int(np.sqrt(size))
         self.difficulty_map = {
-            'easy': {'score': 1, 'clues': (36, 45)},
-            'medium': {'score': 2, 'clues': (30, 35)},
-            'hard': {'score': 3, 'clues': (26, 29)},
-            'expert': {'score': 4, 'clues': (22, 25)},
-            'master': {'score': 5, 'clues': (17, 21)}
+            'easy':   {'score': 1, 'clues': (36, 49)},
+            'medium': {'score': 2, 'clues': (32, 35)},
+            'hard':   {'score': 3, 'clues': (28, 31)},
+            'expert': {'score': 4, 'clues': (17, 27)},
+            'master': {'score': 5, 'clues': (17, 27)}
         }
         
     def generate_puzzle(self, difficulty: str) -> Tuple[List[List[int]], List[List[int]]]:
@@ -81,11 +81,13 @@ class SudokuGenerator:
         random.shuffle(cells)
         
         target = self.difficulty_map.get(difficulty.lower(), self.difficulty_map['medium'])
+        min_clues, max_clues = target['clues']
+        target_clues = random.randint(min_clues, max_clues)
         
         clues = self.size * self.size
         
         for r, c in cells:
-            if clues <= target['clues'][0]:
+            if clues <= target_clues:
                 break 
             
             temp_val = puzzle[r][c]

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Body
 from typing import List, Optional
 from pydantic import BaseModel
 from ..core.sudoku import SudokuGenerator
@@ -17,16 +17,22 @@ class SudokuPuzzle(BaseModel):
     difficulty: str
 
 @router.post("/new")
-async def new_game(difficulty: str = "medium", size: int = 9):
+async def new_game(
+    data: dict = Body(...),
+    size: int = 9
+):
     """Generate a new Sudoku puzzle."""
     try:
+        difficulty = data.get("difficulty", "medium")
         generator = SudokuGenerator(size)
         puzzle, solution = generator.generate_puzzle(difficulty)
+        clue_count = sum(cell != 0 for row in puzzle for cell in row)
         return {
             "grid": puzzle,
             "solution": solution,
             "difficulty": difficulty,
-            "size": size
+            "size": size,
+            "clue_count": clue_count
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
