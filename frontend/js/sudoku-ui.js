@@ -13,8 +13,11 @@ class SudokuUI {
 
         // Set up event listeners
         if (this.generateDocButton) {
-            this.generateDocButton.addEventListener('click', () => {
-                this.documentGenerator.generateSolutionDocument();
+            this.generateDocButton.addEventListener('click', async () => {
+                await this.documentGenerator.generateSolutionDocument();
+                // Show a message/link in the pdf-link-container
+                const pdfLinkContainer = document.getElementById('pdf-link-container');
+                pdfLinkContainer.innerHTML = '<span style="background:#e3f2fd;padding:8px 16px;border-radius:4px;display:inline-block;">PDF generated and downloaded! If it didn\'t download, <a href="#" onclick="window.location.reload()">click here to try again</a>.</span>';
             });
         }
 
@@ -107,6 +110,7 @@ class SudokuUI {
                     createButton.style.display = 'block';
                     startGameButton.style.display = 'none';
                     this.enableGameControls();
+                    this.resetTimer();
                     this.render();
                     this.showMessage('Custom puzzle started! Good luck!');
                 } else {
@@ -446,9 +450,11 @@ class SudokuUI {
     }
     
     resetTimer() {
+        this.stopTimer();
         this.elapsedTime = 0;
         this.lastUpdateTime = Date.now();
         this.updateTimer();
+        this.startTimerUpdates();
     }
     
     updateTimer() {

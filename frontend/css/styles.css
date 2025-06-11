@@ -22,6 +22,7 @@ body {
 header {
     text-align: center;
     margin-bottom: 20px;
+    position: relative;
 }
 
 h1 {
@@ -29,8 +30,29 @@ h1 {
     margin-bottom: 20px;
 }
 
+.timer-container {
+    position: static;
+    top: auto;
+    left: auto;
+    transform: none;
+    z-index: auto;
+    display: flex;
+    justify-content: center;
+    margin-bottom: 10px;
+}
+
+#timer {
+    background-color: #344861;
+    color: white;
+    padding: 8px 15px;
+    border-radius: 4px;
+    font-size: 1.2em;
+    display: inline-block;
+}
+
 .controls {
     margin-bottom: 15px;
+    position: relative;
 }
 
 .controls button, .controls select {
@@ -54,10 +76,11 @@ h1 {
     border: 1px solid #344861;
 }
 
-.timer {
-    font-size: 1.2em;
-    color: #344861;
-    margin-bottom: 15px;
+#generate-doc-button {
+    display: block;
+    margin: 10px auto;
+    width: auto;
+    min-width: 150px;
 }
 
 .game-container {

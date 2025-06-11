@@ -1419,7 +1419,8 @@ class SudokuGame {
         if (this.timerInterval) {
             clearInterval(this.timerInterval);
         }
-        this.startTime = Date.now() - (this.elapsedTime || 0);
+        this.elapsedTime = 0; // Reset elapsed time
+        this.startTime = Date.now();
         this.timerInterval = setInterval(() => {
             this.elapsedTime = Date.now() - this.startTime;
         }, 1000);
@@ -2027,6 +2028,7 @@ class SudokuGame {
             // Reset and start timer
             this.stopTimer();
             this.elapsedTime = 0;
+            this.startTime = Date.now();
             this.startTimer();
             
             return true;
