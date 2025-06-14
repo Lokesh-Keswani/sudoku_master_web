@@ -27,9 +27,13 @@ class SudokuGame {
         this.redoStack = [];
 
         // Timer management
-        this.startTime = null;
-        this.elapsedTime = 0;
-        this.timerInterval = null;
+        this.timer = {
+            startTime: 0,
+            elapsedTime: 0,
+            timerInterval: null,
+            isPaused: false,
+            isGameComplete: false
+        };
 
         // Solution tracking
         this.allSolutionSteps = [];  // Store all steps including hints and solution moves
@@ -49,6 +53,21 @@ class SudokuGame {
 
         // New state for finalizeCustomPuzzle
         this.isPlaying = false;
+
+        // Audio trainer properties
+        this.audioTrainer = {
+            enabled: false,
+            currentStep: 0,
+            steps: [],
+            audioContext: null,
+            speechSynthesis: window.speechSynthesis,
+            voice: null,
+            rate: 1.0,
+            pitch: 1.0
+        };
+        
+        // Initialize audio context
+        this.initializeAudioTrainer();
     }
 
     async newGame(difficulty = 'medium') {
@@ -117,7 +136,9 @@ class SudokuGame {
             this.redoStack = [];
 
             // Reset and start timer
-            this.elapsedTime = 0;
+            this.timer.elapsedTime = 0;
+            this.timer.isGameComplete = false;
+            this.timer.isPaused = false;
             this.startTimer();
 
             return true;
@@ -281,65 +302,189 @@ class SudokuGame {
         return bestMove;
     }
 
-    isHiddenSingle(grid, row, col, value, type) {
-        let count = 0;
+    isFullHouse(grid, row, col, value) {
+        // Check if this is the last empty cell in its unit (row, column, or box)
+        const boxRow = Math.floor(row / 3) * 3;
+        const boxCol = Math.floor(col / 3) * 3;
         
-        if (type === 'row') {
-            // Check row
-            for (let c = 0; c < 9; c++) {
-                if (c !== col && grid[row][c] === 0 && 
-                    this.isValidPlacement(grid, row, c, value)) {
-                    count++;
-                }
+        // Check row
+        let rowCount = 0;
+        for (let c = 0; c < 9; c++) {
+            if (grid[row][c] !== 0) rowCount++;
+        }
+        if (rowCount === 8) return 'row';
+        
+        // Check column
+        let colCount = 0;
+        for (let r = 0; r < 9; r++) {
+            if (grid[r][col] !== 0) colCount++;
+        }
+        if (colCount === 8) return 'column';
+        
+        // Check box
+        let boxCount = 0;
+        for (let r = 0; r < 3; r++) {
+            for (let c = 0; c < 3; c++) {
+                if (grid[boxRow + r][boxCol + c] !== 0) boxCount++;
             }
-        } else if (type === 'column') {
-            // Check column
-            for (let r = 0; r < 9; r++) {
-                if (r !== row && grid[r][col] === 0 && 
-                    this.isValidPlacement(grid, r, col, value)) {
-                    count++;
-                }
-            }
-        } else if (type === 'box') {
-            // Check box
-            const boxRow = Math.floor(row / 3) * 3;
-            const boxCol = Math.floor(col / 3) * 3;
-            for (let r = 0; r < 3; r++) {
-                for (let c = 0; c < 3; c++) {
-                    const currentRow = boxRow + r;
-                    const currentCol = boxCol + c;
-                    if ((currentRow !== row || currentCol !== col) && 
-                        grid[currentRow][currentCol] === 0 && 
-                        this.isValidPlacement(grid, currentRow, currentCol, value)) {
-                        count++;
+        }
+        if (boxCount === 8) return 'box';
+        
+        return null;
+    }
+
+    isNakedSingle(grid, row, col) {
+        const possibilities = this.getCellPossibilities(grid, row, col);
+        return possibilities.size === 1;
+    }
+
+    isHiddenSingle(grid, row, col, value, type) {
+        switch (type) {
+            case 'row':
+                for (let c = 0; c < 9; c++) {
+                    if (c !== col && grid[row][c] === 0) {
+                        const possibilities = this.getCellPossibilities(grid, row, c);
+                        if (possibilities.has(value)) {
+                            return false;
+                        }
                     }
+                }
+                return true;
+
+            case 'column':
+                for (let r = 0; r < 9; r++) {
+                    if (r !== row && grid[r][col] === 0) {
+                        const possibilities = this.getCellPossibilities(grid, r, col);
+                        if (possibilities.has(value)) {
+                            return false;
+                        }
+                    }
+                }
+                return true;
+
+            case 'box':
+                const boxRow = Math.floor(row / 3) * 3;
+                const boxCol = Math.floor(col / 3) * 3;
+                for (let r = 0; r < 3; r++) {
+                    for (let c = 0; c < 3; c++) {
+                        const currentRow = boxRow + r;
+                        const currentCol = boxCol + c;
+                        if ((currentRow !== row || currentCol !== col) && grid[currentRow][currentCol] === 0) {
+                            const possibilities = this.getCellPossibilities(grid, currentRow, currentCol);
+                            if (possibilities.has(value)) {
+                                return false;
+                            }
+                        }
+                    }
+                }
+                return true;
+
+            default:
+                return false;
+        }
+    }
+
+    isIntersection(grid, row, col, value) {
+        const boxRow = Math.floor(row / 3) * 3;
+        const boxCol = Math.floor(col / 3) * 3;
+        
+        // Check row-box intersection
+        let rowBoxCount = 0;
+        let rowOutsideCount = 0;
+        for (let c = 0; c < 9; c++) {
+            if (grid[row][c] === 0 && this.isValidPlacement(grid, row, c, value)) {
+                if (c >= boxCol && c < boxCol + 3) {
+                    rowBoxCount++;
+                } else {
+                    rowOutsideCount++;
                 }
             }
         }
+        if (rowBoxCount > 0 && rowOutsideCount === 0) {
+            return 'row_box';
+        }
         
-        return count === 0;
+        // Check column-box intersection
+        let colBoxCount = 0;
+        let colOutsideCount = 0;
+        for (let r = 0; r < 9; r++) {
+            if (grid[r][col] === 0 && this.isValidPlacement(grid, r, col, value)) {
+                if (r >= boxRow && r < boxRow + 3) {
+                    colBoxCount++;
+                } else {
+                    colOutsideCount++;
+                }
+            }
+        }
+        if (colBoxCount > 0 && colOutsideCount === 0) {
+            return 'column_box';
+        }
+        
+        return null;
     }
 
-    isPointingCombination(grid, row, col, value) {
+    isLockedCandidate(grid, row, col, value) {
         const boxRow = Math.floor(row / 3) * 3;
         const boxCol = Math.floor(col / 3) * 3;
-        let rowCount = 0;
-        let colCount = 0;
-        let boxCount = 0;
         
-        // Count possible positions in the box
+        // Type 1 (Pointing): Check if all occurrences in a box are in the same row/column
+        let boxRowCount = 0;
+        let boxColCount = 0;
+        let totalBoxCount = 0;
+        
         for (let r = boxRow; r < boxRow + 3; r++) {
             for (let c = boxCol; c < boxCol + 3; c++) {
                 if (grid[r][c] === 0 && this.isValidPlacement(grid, r, c, value)) {
-                    boxCount++;
-                    if (r === row) rowCount++;
-                    if (c === col) colCount++;
+                    totalBoxCount++;
+                    if (r === row) boxRowCount++;
+                    if (c === col) boxColCount++;
                 }
             }
         }
         
-        // Check if this forms a pointing pair/triple
-        return (boxCount === 2 || boxCount === 3) && (rowCount === boxCount || colCount === boxCount);
+        if (totalBoxCount > 1) {
+            if (boxRowCount === totalBoxCount) {
+                return 'pointing_row';
+            }
+            if (boxColCount === totalBoxCount) {
+                return 'pointing_column';
+            }
+        }
+        
+        // Type 2 (Claiming): Check if all occurrences in a row/column are in the same box
+        let rowBoxCount = 0;
+        let colBoxCount = 0;
+        let totalRowCount = 0;
+        let totalColCount = 0;
+        
+        // Check row
+        for (let c = 0; c < 9; c++) {
+            if (grid[row][c] === 0 && this.isValidPlacement(grid, row, c, value)) {
+                totalRowCount++;
+                if (c >= boxCol && c < boxCol + 3) {
+                    rowBoxCount++;
+                }
+            }
+        }
+        
+        // Check column
+        for (let r = 0; r < 9; r++) {
+            if (grid[r][col] === 0 && this.isValidPlacement(grid, r, col, value)) {
+                totalColCount++;
+                if (r >= boxRow && r < boxRow + 3) {
+                    colBoxCount++;
+                }
+            }
+        }
+        
+        if (totalRowCount > 1 && rowBoxCount === totalRowCount) {
+            return 'claiming_row';
+        }
+        if (totalColCount > 1 && colBoxCount === totalColCount) {
+            return 'claiming_column';
+        }
+        
+        return null;
     }
 
     analyzeMoveQuality(grid, row, col, value) {
@@ -358,9 +503,17 @@ class SudokuGame {
             timestamp: Date.now()
         };
 
+        // Check for Full House (Last Digit)
+        const fullHouseType = this.isFullHouse(grid, row, col, value);
+        if (fullHouseType) {
+            moveInfo.technique = 'full_house';
+            moveInfo.score = 1;
+            moveInfo.reason = `Last empty cell in ${fullHouseType}`;
+            return moveInfo;
+        }
+
         // Check for naked single
-        const possibilities = this.getCellPossibilities(grid, row, col);
-        if (possibilities.size === 1) {
+        if (this.isNakedSingle(grid, row, col)) {
             moveInfo.technique = 'naked_single';
             moveInfo.score = 1;
             moveInfo.reason = 'Only one possible value for this cell';
@@ -388,6 +541,62 @@ class SudokuGame {
             moveInfo.technique = 'hidden_single_box';
             moveInfo.score = 2;
             moveInfo.reason = `Only possible position for ${value} in this box`;
+            return moveInfo;
+        }
+
+        // Check for hidden subset
+        const hiddenSubset = this.findHiddenSubset(grid, row, col, value, 'row') ||
+                           this.findHiddenSubset(grid, row, col, value, 'column') ||
+                           this.findHiddenSubset(grid, row, col, value, 'box');
+        if (hiddenSubset) {
+            moveInfo.technique = hiddenSubset.type;
+            moveInfo.score = 3;
+            moveInfo.reason = `Forms a ${hiddenSubset.type} with candidates ${hiddenSubset.candidates.join(', ')}`;
+            return moveInfo;
+        }
+
+        // Check for naked subset
+        const nakedSubset = this.findNakedSubset(grid, row, col, value);
+        if (nakedSubset) {
+            moveInfo.technique = nakedSubset.type;
+            moveInfo.score = 3;
+            moveInfo.reason = `Forms a ${nakedSubset.type} with candidates ${nakedSubset.candidates.join(', ')}`;
+            return moveInfo;
+        }
+
+        // Check for intersection
+        const intersectionType = this.isIntersection(grid, row, col, value);
+        if (intersectionType) {
+            moveInfo.technique = 'intersection';
+            moveInfo.score = 3;
+            moveInfo.reason = `Forms an intersection pattern in ${intersectionType}`;
+            return moveInfo;
+        }
+
+        // Check for locked candidate
+        const lockedCandidateType = this.isLockedCandidate(grid, row, col, value);
+        if (lockedCandidateType) {
+            moveInfo.technique = 'locked_candidate';
+            moveInfo.score = 3;
+            moveInfo.reason = `Forms a ${lockedCandidateType} pattern`;
+            return moveInfo;
+        }
+
+        // Check for Fish patterns
+        const fish = this.findFish(grid, row, col, value);
+        if (fish) {
+            moveInfo.technique = fish.type;
+            moveInfo.score = 4;
+            moveInfo.reason = `Forms a ${fish.type} pattern in ${fish.unit}s ${fish.cells.map(c => c.row + 1).join(', ')}`;
+            return moveInfo;
+        }
+
+        // Check for Unique Rectangle
+        const uniqueRect = this.findUniqueRectangle(grid, row, col, value);
+        if (uniqueRect) {
+            moveInfo.technique = 'unique_rectangle';
+            moveInfo.score = 4;
+            moveInfo.reason = `Forms a unique rectangle with shared candidates ${uniqueRect.sharedCandidates.join(', ')}`;
             return moveInfo;
         }
 
@@ -476,6 +685,28 @@ class SudokuGame {
         }
 
         return false;
+    }
+
+    isPointingCombination(grid, row, col, value) {
+        const boxRow = Math.floor(row / 3) * 3;
+        const boxCol = Math.floor(col / 3) * 3;
+        let rowCount = 0;
+        let colCount = 0;
+        let boxCount = 0;
+        
+        // Count possible positions in the box
+        for (let r = boxRow; r < boxRow + 3; r++) {
+            for (let c = boxCol; c < boxCol + 3; c++) {
+                if (grid[r][c] === 0 && this.isValidPlacement(grid, r, c, value)) {
+                    boxCount++;
+                    if (r === row) rowCount++;
+                    if (c === col) colCount++;
+                }
+            }
+        }
+        
+        // Check if this forms a pointing pair/triple
+        return (boxCount === 2 || boxCount === 3) && (rowCount === boxCount || colCount === boxCount);
     }
 
     isBoxLineReduction(grid, row, col, value) {
@@ -1114,77 +1345,6 @@ class SudokuGame {
         return steps;
     }
 
-    isHiddenSingle(grid, row, col, value, type) {
-        switch (type) {
-            case 'row':
-                for (let c = 0; c < 9; c++) {
-                    if (c !== col && grid[row][c] === 0) {
-                        const possibilities = this.getCellPossibilities(grid, row, c);
-                        if (possibilities.has(value)) {
-                            return false;
-                        }
-                    }
-                }
-                return true;
-
-            case 'column':
-                for (let r = 0; r < 9; r++) {
-                    if (r !== row && grid[r][col] === 0) {
-                        const possibilities = this.getCellPossibilities(grid, r, col);
-                        if (possibilities.has(value)) {
-                            return false;
-                        }
-                    }
-                }
-                return true;
-
-            case 'box':
-                const boxRow = Math.floor(row / 3) * 3;
-                const boxCol = Math.floor(col / 3) * 3;
-                for (let r = 0; r < 3; r++) {
-                    for (let c = 0; c < 3; c++) {
-                        const currentRow = boxRow + r;
-                        const currentCol = boxCol + c;
-                        if ((currentRow !== row || currentCol !== col) && grid[currentRow][currentCol] === 0) {
-                            const possibilities = this.getCellPossibilities(grid, currentRow, currentCol);
-                            if (possibilities.has(value)) {
-                                return false;
-                            }
-                        }
-                    }
-                }
-                return true;
-
-            default:
-                return false;
-        }
-    }
-
-    getAllSolutionSteps() {
-        // Get all recorded steps (player moves and hints)
-        const recordedSteps = [...this.allSolutionSteps].sort((a, b) => a.timestamp - b.timestamp);
-        
-        // If we have all cells filled, return just the recorded steps
-        if (this.isGridComplete(this.grid)) {
-            return recordedSteps;
-        }
-
-        // Generate remaining steps using strategic approach
-        const remainingSteps = this.generateRemainingSteps();
-        
-        // Add timestamps to remaining steps, starting after the last recorded step
-        const lastTimestamp = recordedSteps.length > 0 
-            ? recordedSteps[recordedSteps.length - 1].timestamp 
-            : Date.now();
-            
-        remainingSteps.forEach((step, index) => {
-            step.timestamp = lastTimestamp + (index + 1) * 1000; // Space them 1 second apart
-        });
-
-        // Combine recorded and remaining steps
-        return [...recordedSteps, ...remainingSteps];
-    }
-
     isGridComplete(grid) {
         for (let row = 0; row < 9; row++) {
             for (let col = 0; col < 9; col++) {
@@ -1430,30 +1590,68 @@ class SudokuGame {
 
     // Timer management methods
     startTimer() {
-        if (this.isCreating) return; // Don't start timer in creation mode
-        
-        if (this.timerInterval) {
-            clearInterval(this.timerInterval);
+        if (this.timer.timerInterval) {
+            clearInterval(this.timer.timerInterval);
         }
-        this.elapsedTime = 0; // Reset elapsed time
-        this.startTime = Date.now();
-        this.timerInterval = setInterval(() => {
-            this.elapsedTime = Date.now() - this.startTime;
+        
+        this.timer.startTime = Date.now() - this.timer.elapsedTime;
+        this.timer.isPaused = false;
+        this.timer.isGameComplete = false;
+        
+        this.timer.timerInterval = setInterval(() => {
+            if (!this.timer.isPaused && !this.timer.isGameComplete) {
+                this.timer.elapsedTime = Date.now() - this.timer.startTime;
+                this.updateTimerDisplay();
+            }
         }, 1000);
     }
 
     stopTimer() {
-        if (this.timerInterval) {
-            clearInterval(this.timerInterval);
-            this.timerInterval = null;
+        if (this.timer.timerInterval) {
+            clearInterval(this.timer.timerInterval);
+            this.timer.timerInterval = null;
+        }
+        this.timer.isGameComplete = true;
+        this.updateTimerDisplay();
+    }
+
+    pauseTimer() {
+        if (!this.timer.isGameComplete) {
+            this.timer.isPaused = true;
+            this.timer.elapsedTime = Date.now() - this.timer.startTime;
+            if (this.timer.timerInterval) {
+                clearInterval(this.timer.timerInterval);
+                this.timer.timerInterval = null;
+            }
+        }
+    }
+
+    resumeTimer() {
+        if (!this.timer.isGameComplete && this.timer.isPaused) {
+            this.timer.startTime = Date.now() - this.timer.elapsedTime;
+            this.timer.isPaused = false;
+            this.startTimer();
+        }
+    }
+
+    updateTimerDisplay() {
+        const formattedTime = this.getFormattedTime();
+        const timerElement = document.getElementById('timer');
+        if (timerElement) {
+            timerElement.textContent = formattedTime;
         }
     }
 
     getFormattedTime() {
-        const seconds = Math.floor((this.elapsedTime || 0) / 1000);
-        const minutes = Math.floor(seconds / 60);
-        const remainingSeconds = seconds % 60;
-        return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+        const totalSeconds = Math.floor(this.timer.elapsedTime / 1000);
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = totalSeconds % 60;
+        
+        if (hours > 0) {
+            return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }
+        return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
     }
 
     getNumberCounts() {
@@ -1490,8 +1688,9 @@ class SudokuGame {
         this.isCreating = true;
         // Stop and reset timer
         this.stopTimer();
-        this.elapsedTime = 0;
-        this.timerInterval = null;
+        this.timer.elapsedTime = 0;
+        this.timer.isGameComplete = false;
+        this.timer.isPaused = false;
         
         // Initialize empty grid for creation
         this.grid = Array(9).fill().map(() => 
@@ -2043,8 +2242,9 @@ class SudokuGame {
             
             // Reset and start timer
             this.stopTimer();
-            this.elapsedTime = 0;
-            this.startTime = Date.now();
+            this.timer.elapsedTime = 0;
+            this.timer.isGameComplete = false;
+            this.timer.isPaused = false;
             this.startTimer();
             
             return true;
@@ -2089,5 +2289,565 @@ class SudokuGame {
         }
 
         return null;
+    }
+
+    findHiddenSubset(grid, row, col, value, type) {
+        const possibilities = this.getCellPossibilities(grid, row, col);
+        if (possibilities.size < 2) return null;
+
+        let cells = [];
+        let candidates = new Set([value]);
+
+        // Get all empty cells in the unit
+        if (type === 'row') {
+            for (let c = 0; c < 9; c++) {
+                if (grid[row][c] === 0) {
+                    cells.push({row, col: c});
+                }
+            }
+        } else if (type === 'column') {
+            for (let r = 0; r < 9; r++) {
+                if (grid[r][col] === 0) {
+                    cells.push({row: r, col});
+                }
+            }
+        } else if (type === 'box') {
+            const boxRow = Math.floor(row / 3) * 3;
+            const boxCol = Math.floor(col / 3) * 3;
+            for (let r = 0; r < 3; r++) {
+                for (let c = 0; c < 3; c++) {
+                    if (grid[boxRow + r][boxCol + c] === 0) {
+                        cells.push({row: boxRow + r, col: boxCol + c});
+                    }
+                }
+            }
+        }
+
+        // Find cells that share candidates with the current cell
+        const sharedCells = cells.filter(cell => {
+            if (cell.row === row && cell.col === col) return false;
+            const cellPossibilities = this.getCellPossibilities(grid, cell.row, cell.col);
+            return Array.from(possibilities).some(p => cellPossibilities.has(p));
+        });
+
+        // Check for hidden pairs
+        if (sharedCells.length === 1) {
+            const otherCell = sharedCells[0];
+            const otherPossibilities = this.getCellPossibilities(grid, otherCell.row, otherCell.col);
+            const sharedCandidates = new Set(
+                Array.from(possibilities).filter(p => otherPossibilities.has(p))
+            );
+            if (sharedCandidates.size === 2) {
+                return {
+                    type: 'hidden_pair',
+                    cells: [{row, col}, otherCell],
+                    candidates: Array.from(sharedCandidates)
+                };
+            }
+        }
+
+        // Check for hidden triples
+        if (sharedCells.length === 2) {
+            const [cell1, cell2] = sharedCells;
+            const poss1 = this.getCellPossibilities(grid, cell1.row, cell1.col);
+            const poss2 = this.getCellPossibilities(grid, cell2.row, cell2.col);
+            const sharedCandidates = new Set(
+                Array.from(possibilities).filter(p => 
+                    poss1.has(p) && poss2.has(p)
+                )
+            );
+            if (sharedCandidates.size === 3) {
+                return {
+                    type: 'hidden_triple',
+                    cells: [{row, col}, cell1, cell2],
+                    candidates: Array.from(sharedCandidates)
+                };
+            }
+        }
+
+        return null;
+    }
+
+    findNakedSubset(grid, row, col, value) {
+        const possibilities = this.getCellPossibilities(grid, row, col);
+        if (possibilities.size < 2) return null;
+
+        // Check row
+        const rowSubset = this.findNakedSubsetInUnit(grid, row, col, possibilities, 'row');
+        if (rowSubset) return rowSubset;
+
+        // Check column
+        const colSubset = this.findNakedSubsetInUnit(grid, row, col, possibilities, 'column');
+        if (colSubset) return colSubset;
+
+        // Check box
+        const boxSubset = this.findNakedSubsetInUnit(grid, row, col, possibilities, 'box');
+        if (boxSubset) return boxSubset;
+
+        return null;
+    }
+
+    findNakedSubsetInUnit(grid, row, col, possibilities, type) {
+        let cells = [];
+        let unitCells = [];
+
+        // Get all empty cells in the unit
+        if (type === 'row') {
+            for (let c = 0; c < 9; c++) {
+                if (grid[row][c] === 0) {
+                    unitCells.push({row, col: c});
+                }
+            }
+        } else if (type === 'column') {
+            for (let r = 0; r < 9; r++) {
+                if (grid[r][col] === 0) {
+                    unitCells.push({row: r, col});
+                }
+            }
+        } else if (type === 'box') {
+            const boxRow = Math.floor(row / 3) * 3;
+            const boxCol = Math.floor(col / 3) * 3;
+            for (let r = 0; r < 3; r++) {
+                for (let c = 0; c < 3; c++) {
+                    if (grid[boxRow + r][boxCol + c] === 0) {
+                        unitCells.push({row: boxRow + r, col: boxCol + c});
+                    }
+                }
+            }
+        }
+
+        // Find cells with matching candidates
+        cells = unitCells.filter(cell => {
+            if (cell.row === row && cell.col === col) return true;
+            const cellPossibilities = this.getCellPossibilities(grid, cell.row, cell.col);
+            return cellPossibilities.size === possibilities.size &&
+                   Array.from(possibilities).every(p => cellPossibilities.has(p));
+        });
+
+        if (cells.length === 2) {
+            return {
+                type: 'naked_pair',
+                cells: cells,
+                candidates: Array.from(possibilities)
+            };
+        } else if (cells.length === 3) {
+            return {
+                type: 'naked_triple',
+                cells: cells,
+                candidates: Array.from(possibilities)
+            };
+        }
+
+        return null;
+    }
+
+    findFish(grid, row, col, value) {
+        // Check for X-Wing
+        const xWing = this.findXWing(grid, row, col, value);
+        if (xWing) return xWing;
+
+        // Check for Swordfish
+        const swordfish = this.findSwordfish(grid, row, col, value);
+        if (swordfish) return swordfish;
+
+        // Check for Jellyfish
+        const jellyfish = this.findJellyfish(grid, row, col, value);
+        if (jellyfish) return jellyfish;
+
+        return null;
+    }
+
+    findXWing(grid, row, col, value) {
+        // Check rows for X-Wing
+        const rowXWing = this.findFishInUnit(grid, row, col, value, 'row', 2);
+        if (rowXWing) {
+            return {
+                type: 'x_wing',
+                unit: 'row',
+                cells: rowXWing.cells,
+                value: value
+            };
+        }
+
+        // Check columns for X-Wing
+        const colXWing = this.findFishInUnit(grid, row, col, value, 'column', 2);
+        if (colXWing) {
+            return {
+                type: 'x_wing',
+                unit: 'column',
+                cells: colXWing.cells,
+                value: value
+            };
+        }
+
+        return null;
+    }
+
+    findSwordfish(grid, row, col, value) {
+        // Check rows for Swordfish
+        const rowSwordfish = this.findFishInUnit(grid, row, col, value, 'row', 3);
+        if (rowSwordfish) {
+            return {
+                type: 'swordfish',
+                unit: 'row',
+                cells: rowSwordfish.cells,
+                value: value
+            };
+        }
+
+        // Check columns for Swordfish
+        const colSwordfish = this.findFishInUnit(grid, row, col, value, 'column', 3);
+        if (colSwordfish) {
+            return {
+                type: 'swordfish',
+                unit: 'column',
+                cells: colSwordfish.cells,
+                value: value
+            };
+        }
+
+        return null;
+    }
+
+    findJellyfish(grid, row, col, value) {
+        // Check rows for Jellyfish
+        const rowJellyfish = this.findFishInUnit(grid, row, col, value, 'row', 4);
+        if (rowJellyfish) {
+            return {
+                type: 'jellyfish',
+                unit: 'row',
+                cells: rowJellyfish.cells,
+                value: value
+            };
+        }
+
+        // Check columns for Jellyfish
+        const colJellyfish = this.findFishInUnit(grid, row, col, value, 'column', 4);
+        if (colJellyfish) {
+            return {
+                type: 'jellyfish',
+                unit: 'column',
+                cells: colJellyfish.cells,
+                value: value
+            };
+        }
+
+        return null;
+    }
+
+    findFishInUnit(grid, row, col, value, unitType, size) {
+        let units = [];
+        let cells = [];
+
+        // Get all units (rows or columns) that contain the value as a candidate
+        if (unitType === 'row') {
+            for (let r = 0; r < 9; r++) {
+                let unitCells = [];
+                for (let c = 0; c < 9; c++) {
+                    if (grid[r][c] === 0 && this.isValidPlacement(grid, r, c, value)) {
+                        unitCells.push({row: r, col: c});
+                    }
+                }
+                if (unitCells.length > 0 && unitCells.length <= size) {
+                    units.push({index: r, cells: unitCells});
+                }
+            }
+        } else {
+            for (let c = 0; c < 9; c++) {
+                let unitCells = [];
+                for (let r = 0; r < 9; r++) {
+                    if (grid[r][c] === 0 && this.isValidPlacement(grid, r, c, value)) {
+                        unitCells.push({row: r, col: c});
+                    }
+                }
+                if (unitCells.length > 0 && unitCells.length <= size) {
+                    units.push({index: c, cells: unitCells});
+                }
+            }
+        }
+
+        // Find combinations of units that form a fish pattern
+        if (units.length >= size) {
+            const combinations = this.getCombinations(units, size);
+            for (const combo of combinations) {
+                const allCells = combo.flatMap(u => u.cells);
+                const uniqueCols = new Set(allCells.map(c => c.col));
+                const uniqueRows = new Set(allCells.map(c => c.row));
+
+                if (unitType === 'row' && uniqueCols.size === size) {
+                    return {
+                        cells: allCells,
+                        units: combo.map(u => u.index)
+                    };
+                } else if (unitType === 'column' && uniqueRows.size === size) {
+                    return {
+                        cells: allCells,
+                        units: combo.map(u => u.index)
+                    };
+                }
+            }
+        }
+
+        return null;
+    }
+
+    getCombinations(array, size) {
+        const result = [];
+        const combine = (arr, n) => {
+            if (n === 0) {
+                result.push([...arr]);
+                return;
+            }
+            for (let i = 0; i <= array.length - n; i++) {
+                arr.push(array[i]);
+                combine(arr, n - 1);
+                arr.pop();
+            }
+        };
+        combine([], size);
+        return result;
+    }
+
+    findUniqueRectangle(grid, row, col, value) {
+        // Get all possible rectangles containing this cell
+        const rectangles = this.findPossibleRectangles(grid, row, col);
+        
+        for (const rect of rectangles) {
+            // Check if this forms a unique rectangle pattern
+            const pattern = this.analyzeUniqueRectangle(grid, rect, value);
+            if (pattern) {
+                return pattern;
+            }
+        }
+        
+        return null;
+    }
+
+    findPossibleRectangles(grid, row, col) {
+        const rectangles = [];
+        const boxRow = Math.floor(row / 3) * 3;
+        const boxCol = Math.floor(col / 3) * 3;
+        
+        // Check for rectangles within the same box
+        for (let r = boxRow; r < boxRow + 3; r++) {
+            for (let c = boxCol; c < boxCol + 3; c++) {
+                if (r !== row && c !== col && grid[r][c] === 0) {
+                    // Find the opposite corner
+                    const oppRow = row + (r - row);
+                    const oppCol = col + (c - col);
+                    if (oppRow >= 0 && oppRow < 9 && oppCol >= 0 && oppCol < 9 && grid[oppRow][oppCol] === 0) {
+                        rectangles.push([
+                            {row, col},
+                            {row: r, col: c},
+                            {row: oppRow, col: oppCol},
+                            {row: r, col: col}
+                        ]);
+                    }
+                }
+            }
+        }
+        
+        return rectangles;
+    }
+
+    analyzeUniqueRectangle(grid, rectangle, value) {
+        // Get candidates for all cells in the rectangle
+        const candidates = rectangle.map(cell => 
+            this.getCellPossibilities(grid, cell.row, cell.col)
+        );
+        
+        // Check if three cells share the same two candidates
+        const sharedCandidates = new Set();
+        let extraCell = null;
+        let extraCandidates = null;
+        
+        for (let i = 0; i < candidates.length; i++) {
+            if (candidates[i].size === 2) {
+                candidates[i].forEach(c => sharedCandidates.add(c));
+            } else if (candidates[i].size > 2) {
+                extraCell = rectangle[i];
+                extraCandidates = candidates[i];
+            }
+        }
+        
+        // If we found a pattern
+        if (sharedCandidates.size === 2 && extraCell && extraCandidates) {
+            // Check if the extra cell contains the shared candidates
+            const hasSharedCandidates = Array.from(sharedCandidates)
+                .every(c => extraCandidates.has(c));
+            
+            if (hasSharedCandidates) {
+                return {
+                    type: 'unique_rectangle',
+                    cells: rectangle,
+                    sharedCandidates: Array.from(sharedCandidates),
+                    extraCell: extraCell,
+                    extraCandidates: Array.from(extraCandidates)
+                };
+            }
+        }
+        
+        return null;
+    }
+
+    initializeAudioTrainer() {
+        // Initialize Web Speech API
+        if (this.audioTrainer.speechSynthesis) {
+            // Get available voices
+            const voices = this.audioTrainer.speechSynthesis.getVoices();
+            // Select a suitable voice (prefer English)
+            this.audioTrainer.voice = voices.find(voice => 
+                voice.lang.includes('en') && voice.name.includes('Female')
+            ) || voices[0];
+        }
+
+        // Initialize Web Audio API
+        try {
+            this.audioTrainer.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        } catch (e) {
+            console.warn('Web Audio API not supported:', e);
+        }
+    }
+
+    toggleAudioTrainer() {
+        this.audioTrainer.enabled = !this.audioTrainer.enabled;
+        if (this.audioTrainer.enabled) {
+            this.prepareAudioSteps();
+            this.startAudioTraining();
+        } else {
+            this.stopAudioTraining();
+        }
+        return this.audioTrainer.enabled;
+    }
+
+    prepareAudioSteps() {
+        this.audioTrainer.steps = [];
+        const steps = this.allSolutionSteps;
+
+        for (const step of steps) {
+            const explanation = this.generateAudioExplanation(step);
+            this.audioTrainer.steps.push({
+                step: step,
+                explanation: explanation
+            });
+        }
+    }
+
+    generateAudioExplanation(step) {
+        let explanation = '';
+        
+        switch (step.technique) {
+            case 'full_house':
+                explanation = `This is a Full House. Cell ${this.getCellReference(step.row, step.col)} is the last empty cell in its ${step.reason.split(' in ')[1]}. We can place ${step.value} here.`;
+                break;
+            case 'naked_single':
+                explanation = `This is a Naked Single. Cell ${this.getCellReference(step.row, step.col)} can only contain ${step.value} as it's the only possible value.`;
+                break;
+            case 'hidden_single_row':
+            case 'hidden_single_column':
+            case 'hidden_single_box':
+                explanation = `This is a Hidden Single. ${step.value} can only go in cell ${this.getCellReference(step.row, step.col)} in this ${step.technique.split('_')[2]}.`;
+                break;
+            case 'naked_pair':
+            case 'naked_triple':
+                explanation = `This is a ${step.technique.replace('_', ' ')}. These cells can only contain ${step.reason.split(' with candidates ')[1]}.`;
+                break;
+            case 'hidden_pair':
+            case 'hidden_triple':
+                explanation = `This is a ${step.technique.replace('_', ' ')}. These numbers can only go in these specific cells.`;
+                break;
+            case 'intersection':
+                explanation = `This is an Intersection. ${step.reason}`;
+                break;
+            case 'locked_candidate':
+                explanation = `This is a Locked Candidate. ${step.reason}`;
+                break;
+            case 'x_wing':
+            case 'swordfish':
+            case 'jellyfish':
+                explanation = `This is a ${step.technique}. ${step.reason}`;
+                break;
+            case 'unique_rectangle':
+                explanation = `This is a Unique Rectangle. ${step.reason}`;
+                break;
+            default:
+                explanation = `Place ${step.value} in cell ${this.getCellReference(step.row, step.col)}. ${step.reason}`;
+        }
+
+        return explanation;
+    }
+
+    getCellReference(row, col) {
+        const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
+        return `${letters[row]}${col + 1}`;
+    }
+
+    startAudioTraining() {
+        if (!this.audioTrainer.enabled) return;
+        
+        this.audioTrainer.currentStep = 0;
+        this.playNextAudioStep();
+    }
+
+    stopAudioTraining() {
+        if (this.audioTrainer.speechSynthesis) {
+            this.audioTrainer.speechSynthesis.cancel();
+        }
+    }
+
+    playNextAudioStep() {
+        if (!this.audioTrainer.enabled || 
+            this.audioTrainer.currentStep >= this.audioTrainer.steps.length) {
+            return;
+        }
+
+        const currentStep = this.audioTrainer.steps[this.audioTrainer.currentStep];
+        
+        // Highlight the current step's cell
+        this.selectCell(currentStep.step.row, currentStep.step.col);
+        
+        // Speak the explanation
+        if (this.audioTrainer.speechSynthesis) {
+            const utterance = new SpeechSynthesisUtterance(currentStep.explanation);
+            utterance.voice = this.audioTrainer.voice;
+            utterance.rate = this.audioTrainer.rate;
+            utterance.pitch = this.audioTrainer.pitch;
+            
+            utterance.onend = () => {
+                // Wait a moment before moving to the next step
+                setTimeout(() => {
+                    this.audioTrainer.currentStep++;
+                    this.playNextAudioStep();
+                }, 1000);
+            };
+            
+            this.audioTrainer.speechSynthesis.speak(utterance);
+        }
+    }
+
+    setAudioTrainerVoice(voice) {
+        if (this.audioTrainer.speechSynthesis) {
+            const voices = this.audioTrainer.speechSynthesis.getVoices();
+            this.audioTrainer.voice = voices.find(v => v.name === voice) || voices[0];
+        }
+    }
+
+    setAudioTrainerRate(rate) {
+        this.audioTrainer.rate = rate;
+    }
+
+    setAudioTrainerPitch(pitch) {
+        this.audioTrainer.pitch = pitch;
+    }
+
+    // Add pause/resume functionality to the game
+    togglePause() {
+        if (this.timer.isPaused) {
+            this.resumeTimer();
+            return false; // Return false to indicate game is resumed
+        } else {
+            this.pauseTimer();
+            return true; // Return true to indicate game is paused
+        }
     }
 }
