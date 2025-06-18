@@ -68,6 +68,9 @@ class SudokuGame {
         
         // Initialize audio context
         this.initializeAudioTrainer();
+
+        // Integrate advanced techniques
+        this.techniques = new window.SudokuTechniques();
     }
 
     async newGame(difficulty = 'medium') {
@@ -488,11 +491,55 @@ class SudokuGame {
     }
 
     analyzeMoveQuality(grid, row, col, value) {
-        // Basic validation
-        if (!this.isValidPlacement(grid, row, col, value)) {
-            return null;
+        // Use advanced techniques from SudokuTechniques
+        // 1. Try all techniques in order of difficulty
+        // 2. Return the first applicable step
+        // 3. Fallback to legacy logic if needed
+        const candidates = this.getCellPossibilities(grid, row, col);
+        if (!candidates.has(value)) return null;
+        // Prepare a cell grid for techniques (with candidates)
+        const cellGrid = grid.map((rowArr, r) => rowArr.map((v, c) => ({
+            value: v,
+            candidates: this.getCellPossibilities(grid, r, c)
+        })));
+        // Try each technique in order
+        const techniquesToTry = [
+            'findFullHouse',
+            'findHiddenSingle',
+            'findNakedSingle',
+            'findLockedCandidatesType1',
+            'findLockedCandidatesType2',
+            'findHiddenPair',
+            'findHiddenTriple',
+            'findHiddenQuadruple',
+            'findNakedPair',
+            'findNakedTriple',
+            'findNakedQuadruple',
+            'findBasicFish',
+            'findFinnedFish',
+            'findComplexFish',
+            'findSkyscraper',
+            // ...add all other implemented techniques here...
+        ];
+        for (const tech of techniquesToTry) {
+            if (typeof this.techniques[tech] === 'function') {
+                const step = this.techniques[tech](cellGrid);
+                if (step && step.cells && step.cells.some(cell => cell.row === row && cell.col === col && (cell.value === value || cell.value === null))) {
+                    // Format for UI
+                    return {
+                        technique: step.type,
+                        row,
+                        col,
+                        value,
+                        reason: step.explanation || '',
+                        eliminations: step.eliminations || [],
+                        difficulty: step.difficulty || 'Advanced',
+                        timestamp: Date.now()
+                    };
+                }
+            }
         }
-
+        // Fallback to legacy logic
         const moveInfo = {
             row,
             col,
@@ -1227,7 +1274,7 @@ class SudokuGame {
         if (!this.solution) {
             console.log('No solution available, attempting to generate one...');
             const currentGrid = this.grid.map(row => row.map(cell => cell.value));
-            const solvedGrid = this.solvePuzzle([...currentGrid.map(row => [...row])]);
+            const solvedGrid = this.solvePuzzle(currentGrid);
             if (solvedGrid) {
                 this.solution = solvedGrid;
                 console.log('Generated solution successfully');
@@ -2106,6 +2153,7 @@ class SudokuGame {
         });
 
         // Add strategy distribution
+       
         y += 10;
         doc.setFontSize(14);
         doc.text('Strategy Distribution:', 20, y);

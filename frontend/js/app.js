@@ -16,6 +16,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 game.makeMove(parseInt(key)).then(valid => {
                     if (valid) {
                         ui.render();
+                        // Audio explanation for the move
+                        const cell = game.selectedCell;
+                        const value = parseInt(key);
+                        if (cell && value) {
+                            const msg = new SpeechSynthesisUtterance(`Placed ${value} at row ${cell.row + 1}, column ${cell.col + 1}`);
+                            window.speechSynthesis.speak(msg);
+                        }
                         // Check if puzzle is solved after each valid move
                         game.checkSolution().then(result => {
                             if (result.solved) {
@@ -41,4 +48,35 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('blur', () => {
         game.pauseTimer();
     });
-}); 
+
+    // Check Solution button event handler
+    document.getElementById('check-solution').addEventListener('click', () => {
+        game.checkSolution().then(result => {
+            if (result.solved && result.solutionPath) {
+                ui.fillBoardWithSolution(result.solutionPath);
+                ui.showSolutionPanel(result.solutionPath);
+                fillBoardWithSolution(result.solutionPath);
+            }
+        });
+    });
+});
+
+// Fill the board with the solution steps using the SudokuGame instance
+function fillBoardWithSolution(solutionPath) {
+    if (!window.sudoku) {
+        console.log('SudokuGame instance not found on window');
+        return;
+    }
+    solutionPath.forEach(step => {
+        if (step && typeof step.row === 'number' && typeof step.col === 'number' && typeof step.value === 'number') {
+            window.sudoku.grid[step.row][step.col].value = step.value;
+            console.log(`Filled cell [${step.row},${step.col}] with value ${step.value}`);
+        }
+    });
+    if (window.sudokuUI && typeof window.sudokuUI.renderGrid === 'function') {
+        console.log('Calling sudokuUI.renderGrid()');
+        window.sudokuUI.renderGrid();
+    } else {
+        console.log('sudokuUI.renderGrid() not found');
+    }
+}

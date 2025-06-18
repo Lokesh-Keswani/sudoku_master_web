@@ -153,6 +153,7 @@ class SudokuUI {
                     this.showDownloadButton();
                 } else if (result.showSolution && result.solutionPath) {
                     this.showSolutionPanel(result.solutionPath);
+                    // this.fillBoardWithSolution(result.solutionPath); // Commented out to restore step-by-step behavior
                     this.showMessage('Here is the step-by-step solution.');
                 } else {
                     this.showMessage('Keep trying! Click check again to see the solution.');
@@ -475,29 +476,137 @@ class SudokuUI {
         this.timerElement.textContent = formattedTime;
     }
 
+    showStep(step, isAutoPlay = false, onSpeechEnd = null) {
+        const stepInfo = document.getElementById('step-info');
+        if (!stepInfo) return;
+
+        if (step) {
+            console.log('Showing step:', step);
+            const technique = step.technique || step.strategy || 'Logical Deduction';
+            const difficulty = step.difficulty || 'Basic';
+            const reason = step.reason || 'Move made based on logical deduction';
+            const formattedTechnique = technique.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+            const difficultyClass = difficulty.toLowerCase().replace(/\s+/g, '-');
+            const techniqueExplanations = {
+                // Singles
+                'Naked Single': 'Naked Single: Only one candidate remains for this cell, so it must be placed here.',
+                'Hidden Single': 'Hidden Single: A digit can only go in one cell within a unit (row, column, or box).',
+                'Full House': 'Full House (Last Digit): Only one empty cell remains in a unit, so the missing digit must go there.',
+                // Intersections
+                'Locked Candidates Type 1 (Pointing)': 'Locked Candidates Type 1 (Pointing): All candidates for a digit in a box are confined to a single row or column, so that digit can be eliminated from the rest of that row or column.',
+                'Locked Candidates Type 2 (Claiming)': 'Locked Candidates Type 2 (Claiming): All candidates for a digit in a row or column are confined to a single box, so that digit can be eliminated from the rest of that box.',
+                // Hidden Subsets
+                'Hidden Pair': 'Hidden Pair: Two digits can only go in two cells within a unit, so all other candidates can be removed from those cells.',
+                'Hidden Triple': 'Hidden Triple: Three digits can only go in three cells within a unit, so all other candidates can be removed from those cells.',
+                'Hidden Quadruple': 'Hidden Quadruple: Four digits can only go in four cells within a unit, so all other candidates can be removed from those cells.',
+                // Naked Subsets
+                'Naked Pair': 'Naked Pair: Two cells in a unit contain only the same two candidates, so those candidates can be removed from other cells in the unit.',
+                'Naked Triple': 'Naked Triple: Three cells in a unit contain only the same three candidates, so those candidates can be removed from other cells in the unit.',
+                'Naked Quadruple': 'Naked Quadruple: Four cells in a unit contain only the same four candidates, so those candidates can be removed from other cells in the unit.',
+                // Fish
+                'X-Wing': 'X-Wing: A digit appears in exactly two cells in two different rows and columns, forming a rectangle. This allows elimination of that digit from other cells in those columns/rows.',
+                'Swordfish': 'Swordfish: Like X-Wing, but with three rows and columns.',
+                'Jellyfish': 'Jellyfish: Like X-Wing, but with four rows and columns.',
+                // Finned/Sashimi Fish
+                'Finned X-Wing': 'Finned X-Wing: An X-Wing with an extra candidate (the fin) that allows for additional eliminations.',
+                'Finned Swordfish': 'Finned Swordfish: A Swordfish with a fin.',
+                'Finned Jellyfish': 'Finned Jellyfish: A Jellyfish with a fin.',
+                // Complex Fish
+                'Franken Fish': 'Franken Fish: A fish pattern that uses non-standard blocks.',
+                'Mutant Fish': 'Mutant Fish: A fish pattern that uses both rows and columns as base/cover sets.',
+                'Siamese Fish': 'Siamese Fish: Two fish patterns sharing base sets.',
+                // Single Digit Patterns
+                'Skyscraper': 'Skyscraper: A digit forms a strong link in two rows/columns, allowing eliminations.',
+                '2-String Kite': '2-String Kite: A pattern combining strong links in a row and column.',
+                'Turbot Fish': 'Turbot Fish: A pattern combining strong links in rows and columns.',
+                'Empty Rectangle': 'Empty Rectangle: A digit’s candidates in a box are limited to one row/column, allowing eliminations.',
+                // Uniqueness
+                'Unique Rectangle': 'Unique Rectangle: A pattern that would allow multiple solutions, so certain candidates can be eliminated.',
+                'BUG+1': 'BUG+1: Binary Universal Grave + 1. Only one cell can take a certain value to avoid multiple solutions.',
+                // Wings
+                'XY-Wing': 'XY-Wing: Three cells with specific candidate relationships allow eliminations.',
+                'XYZ-Wing': 'XYZ-Wing: An extension of XY-Wing with an additional candidate.',
+                'W-Wing': 'W-Wing: Two cells with a strong link allow eliminations.',
+                // Miscellaneous
+                'Sue de Coq': 'Sue de Coq: A complex pattern involving two sets of cells and candidates.',
+                'Coloring': 'Coloring: Using colors to track strong/weak links and make eliminations.',
+                // Chains and Loops
+                'Remote Pair': 'Remote Pair: A chain of cells with the same two candidates allows eliminations.',
+                'X-Chain': 'X-Chain: A chain of strong links for a single digit.',
+                'XY-Chain': 'XY-Chain: A chain of cells with alternating candidates allows eliminations.',
+                'Nice Loop': 'Nice Loop (AIC): Alternating Inference Chains and Nice Loops for advanced eliminations.',
+                // ALS
+                'ALS-XZ': 'ALS-XZ: Almost Locked Set XZ rule for advanced eliminations.',
+                'ALS-XY-Wing': 'ALS-XY-Wing: An ALS-based extension of the XY-Wing.',
+                'ALS Chain': 'ALS Chain: A chain of Almost Locked Sets.',
+                'Death Blossom': 'Death Blossom: A complex pattern involving multiple ALS.',
+                // Last Resort
+                'Templates': 'Templates: Template-based solving approach.',
+                'Forcing Chain': 'Forcing Chain: Chain-based forcing pattern.',
+                'Forcing Net': 'Forcing Net: Network of forcing chains.',
+                'Kraken Fish': 'Kraken Fish: Complex fish pattern with additional candidates.',
+                'Brute Force': 'Brute Force: Last resort solving method, tries all possibilities.'
+            };
+            let techniqueDescription = techniqueExplanations[formattedTechnique] || `${formattedTechnique} is a Sudoku technique.`;
+            stepInfo.innerHTML = `
+                <div class="step-header">
+                    <span class="strategy-badge ${difficultyClass}">${formattedTechnique}</span>
+                    <span class="difficulty-badge ${difficultyClass}">${difficulty}</span>
+                </div>
+                <p class="technique-explanation"><strong>About this technique:</strong> ${techniqueDescription}</p>
+                <p class="step-location">Row ${step.row + 1}, Column ${step.col + 1}: Place ${step.value}</p>
+                <p class="step-reason">${reason}</p>
+            `;
+            let why = step.why || reason;
+            let explanation = `${formattedTechnique} technique is used here. ${techniqueDescription} Placing ${step.value} at row ${step.row + 1}, column ${step.col + 1}. ${why} This was the best move because: ${reason}.`;
+            const msg = new SpeechSynthesisUtterance(explanation);
+            window.speechSynthesis.cancel();
+            if (isAutoPlay && typeof onSpeechEnd === 'function') {
+                msg.onend = onSpeechEnd;
+            }
+            window.speechSynthesis.speak(msg);
+            this.game.grid[step.row][step.col] = {
+                value: step.value,
+                isFixed: false,
+                notes: new Set()
+            };
+            this.render();
+            const cells = document.querySelectorAll('.cell');
+            const cellIndex = step.row * 9 + step.col;
+            const cell = cells[cellIndex];
+            if (cell) {
+                cells.forEach(c => c.classList.remove('solution-highlight'));
+                cell.classList.add('solution-highlight');
+            }
+        }
+    }
+
     showSolutionPanel(solutionPath) {
         console.log('Showing solution panel with path:', solutionPath); // Debug log
 
-        // Remove existing solution panel if any
-        const existingPanel = document.querySelector('.solution-panel');
-        if (existingPanel) {
-            existingPanel.remove();
-        }
-
-        const panel = document.createElement('div');
+        // Use the static panel from the HTML
+        const panel = document.getElementById('solution-steps-panel');
+        if (!panel) return;
         panel.className = 'solution-panel';
+        panel.innerHTML = '';
 
+        // Header
         const header = document.createElement('h3');
         header.textContent = 'Solution Steps';
         panel.appendChild(header);
 
+        // Content
         const content = document.createElement('div');
         content.className = 'solution-content';
+        panel.appendChild(content);
 
+        // Step info (where step explanations go)
         const stepInfo = document.createElement('div');
+        stepInfo.id = 'step-info';
         stepInfo.className = 'step-info';
         content.appendChild(stepInfo);
 
+        // Controls
         const controls = document.createElement('div');
         controls.className = 'solution-controls';
 
@@ -513,118 +622,64 @@ class SudokuUI {
         autoPlayButton.textContent = 'Auto Play';
         autoPlayButton.className = 'solution-auto-button';
 
-        let autoPlayInterval = null;
         let currentStepIndex = -1;
+        let autoPlayActive = false;
+        let autoPlayShouldStop = false;
 
-        const showStep = (step) => {
-            if (step) {
-                console.log('Showing step:', step); // Debug log
-
-                // Get the technique and difficulty, with fallbacks
-                const technique = step.technique || step.strategy || 'Logical Deduction';
-                const difficulty = step.difficulty || 'Basic';
-                const reason = step.reason || 'Move made based on logical deduction';
-
-                // Format the technique name
-                const formattedTechnique = technique.split('_')
-                    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-                    .join(' ');
-
-                // Add difficulty class for styling
-                const difficultyClass = difficulty.toLowerCase().replace(/\s+/g, '-');
-
-                stepInfo.innerHTML = `
-                    <div class="step-header">
-                        <span class="strategy-badge ${difficultyClass}">${formattedTechnique}</span>
-                        <span class="difficulty-badge ${difficultyClass}">${difficulty}</span>
-                    </div>
-                    <p class="step-location">Row ${step.row + 1}, Column ${step.col + 1}: Place ${step.value}</p>
-                    <p class="step-reason">${reason}</p>
-                `;
-
-                // Apply the move to the game grid
-                this.game.grid[step.row][step.col] = {
-                    value: step.value,
-                    isFixed: false,
-                    notes: new Set()
+        // Auto play logic (waits for speech to finish)
+        autoPlayButton.addEventListener('click', () => {
+            if (autoPlayActive) {
+                autoPlayShouldStop = true;
+                autoPlayActive = false;
+                autoPlayButton.textContent = 'Auto Play';
+            } else {
+                autoPlayActive = true;
+                autoPlayShouldStop = false;
+                autoPlayButton.textContent = 'Stop';
+                const playStep = (index) => {
+                    if (autoPlayShouldStop || index >= solutionPath.length) {
+                        autoPlayActive = false;
+                        autoPlayButton.textContent = 'Auto Play';
+                        return;
+                    }
+                    currentStepIndex = index;
+                    this.showStep(solutionPath[currentStepIndex], true, () => {
+                        playStep(index + 1);
+                    });
                 };
-
-                // Re-render the entire grid
-                this.render();
-
-                // Highlight the affected cell
-                const cells = document.querySelectorAll('.cell');
-                const cellIndex = step.row * 9 + step.col;
-                const cell = cells[cellIndex];
-                if (cell) {
-                    // Remove previous highlights
-                    cells.forEach(c => c.classList.remove('solution-highlight'));
-                    // Add highlight to current cell
-                    cell.classList.add('solution-highlight');
-                }
+                playStep(currentStepIndex < 0 ? 0 : currentStepIndex);
             }
-        };
+        });
 
-        // Previous button click handler
         prevButton.addEventListener('click', () => {
             if (currentStepIndex > 0) {
                 currentStepIndex--;
-                showStep(solutionPath[currentStepIndex]);
+                this.showStep(solutionPath[currentStepIndex]);
             }
-            if (autoPlayInterval) {
-                clearInterval(autoPlayInterval);
-                autoPlayInterval = null;
-                autoPlayButton.textContent = 'Auto Play';
-            }
+            autoPlayActive = false;
+            autoPlayButton.textContent = 'Auto Play';
         });
 
-        // Auto play button click handler
-        autoPlayButton.addEventListener('click', () => {
-            if (autoPlayInterval) {
-                clearInterval(autoPlayInterval);
-                autoPlayInterval = null;
-                autoPlayButton.textContent = 'Auto Play';
-            } else {
-                autoPlayButton.textContent = 'Stop';
-                autoPlayInterval = setInterval(() => {
-                    if (currentStepIndex < solutionPath.length - 1) {
-                        currentStepIndex++;
-                        showStep(solutionPath[currentStepIndex]);
-                    } else {
-                        clearInterval(autoPlayInterval);
-                        autoPlayInterval = null;
-                        autoPlayButton.textContent = 'Auto Play';
-                    }
-                }, 1500);
-            }
-        });
-
-        // Next button click handler
         nextButton.addEventListener('click', () => {
             if (currentStepIndex < solutionPath.length - 1) {
                 currentStepIndex++;
-                showStep(solutionPath[currentStepIndex]);
+                this.showStep(solutionPath[currentStepIndex]);
             }
-            if (autoPlayInterval) {
-                clearInterval(autoPlayInterval);
-                autoPlayInterval = null;
-                autoPlayButton.textContent = 'Auto Play';
-            }
+            autoPlayActive = false;
+            autoPlayButton.textContent = 'Auto Play';
         });
 
         controls.appendChild(prevButton);
         controls.appendChild(autoPlayButton);
         controls.appendChild(nextButton);
-
-        panel.appendChild(content);
         panel.appendChild(controls);
-
-        document.querySelector('.game-container').appendChild(panel);
 
         // Show the first step
         if (solutionPath && solutionPath.length > 0) {
             currentStepIndex = 0;
-            showStep(solutionPath[currentStepIndex]);
+            this.showStep(solutionPath[currentStepIndex]);
+        } else {
+            stepInfo.innerHTML = '<em>No solution steps available.</em>';
         }
     }
 
@@ -738,5 +793,15 @@ class SudokuUI {
                 button.classList.remove('completed');
             }
         });
+    }
+
+    fillBoardWithSolution(solutionPath) {
+        if (!solutionPath) return;
+        solutionPath.forEach(step => {
+            if (step && typeof step.row === 'number' && typeof step.col === 'number' && typeof step.value === 'number') {
+                this.game.grid[step.row][step.col].value = step.value;
+            }
+        });
+        this.render();
     }
 }
