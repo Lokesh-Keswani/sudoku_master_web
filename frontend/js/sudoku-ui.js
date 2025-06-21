@@ -10,17 +10,18 @@ class SudokuUI {
 
         // Get UI elements
         this.generateDocButton = document.getElementById('generate-doc-button');
+        this.newGameButton = document.getElementById('new-game');
+        this.createPuzzleButton = document.getElementById('create-puzzle');
+        this.startGameButton = document.getElementById('start-game');
+        this.hintButton = document.getElementById('hint');
+        this.checkButton = document.getElementById('check');
+        this.notesModeButton = document.getElementById('notes-mode');
+        this.eraseButton = document.getElementById('erase');
+        this.undoButton = document.getElementById('undo');
+        this.redoButton = document.getElementById('redo');
+        this.difficultySelect = document.getElementById('difficulty');
 
         // Set up event listeners
-        if (this.generateDocButton) {
-            this.generateDocButton.addEventListener('click', async () => {
-                await this.documentGenerator.generateSolutionDocument();
-                // Show a message/link in the pdf-link-container
-                const pdfLinkContainer = document.getElementById('pdf-link-container');
-                pdfLinkContainer.innerHTML = '<span style="background:#e3f2fd;padding:8px 16px;border-radius:4px;display:inline-block;">PDF generated and downloaded! If it didn\'t download, <a href="#" onclick="window.location.reload()">click here to try again</a>.</span>';
-            });
-        }
-
         this.setupEventListeners();
         this.render();
 
@@ -54,21 +55,20 @@ class SudokuUI {
         this.setupNewGameButton();
         this.setupCreatePuzzleButton();
         this.setupHintButton();
-        this.setupCheckButton();
         this.setupNotesButton();
         this.setupEraseButton();
         this.setupUndoRedoButtons();
         this.setupNumberPad();
+        this.setupDocumentButton();
 
-        // Hide generate doc button initially
-        if (this.generateDocButton) {
-            this.generateDocButton.style.display = 'none';
-        }
+        // Update document button visibility based on game state
+        this.updateDocumentButtonVisibility();
     }
 
     setupNewGameButton() {
         document.getElementById('new-game').addEventListener('click', () => {
             const difficulty = document.getElementById('difficulty').value;
+            this.game.allSolutionSteps = [];
             this.game.newGame(difficulty).then(() => {
                 // Reset the timer
                 this.resetTimer();
@@ -136,104 +136,117 @@ class SudokuUI {
         });
     }
 
-    setupCheckButton() {
-        console.log('Setting up check button...'); // Debug log
-        const checkButton = document.getElementById('check');
-        if (checkButton) {
-            console.log('Check button found'); // Debug log
-            checkButton.addEventListener('click', async () => {
-                console.log('Check button clicked'); // Debug log
-                const result = await this.game.checkSolution();
-                console.log('Check result:', result); // Debug log
-
-                if (result.solved) {
-                    this.showMessage('Congratulations! Puzzle solved!');
-                    this.timeElement.textContent = this.game.getFormattedTime();
-                    this.disableGameControls();
-                    this.showDownloadButton();
-                } else if (result.showSolution && result.solutionPath) {
-                    this.showSolutionPanel(result.solutionPath);
-                    // this.fillBoardWithSolution(result.solutionPath); // Commented out to restore step-by-step behavior
-                    this.showMessage('Here is the step-by-step solution.');
-                } else {
-                    this.showMessage('Keep trying! Click check again to see the solution.');
-                }
+    setupNotesButton() {
+        const notesButton = document.getElementById('notes-mode');
+        if (notesButton) {
+            notesButton.addEventListener('click', (e) => {
+                this.game.isNotesMode = !this.game.isNotesMode;
+                e.target.classList.toggle('active');
+                this.showMessage(this.game.isNotesMode ? 'Notes mode ON' : 'Notes mode OFF');
             });
-        } else {
-            console.error('Check button not found in DOM'); // Debug log
         }
     }
 
-    setupNotesButton() {
-        const notesButton = document.getElementById('notes-mode');
-        notesButton.addEventListener('click', (e) => {
-            this.game.isNotesMode = !this.game.isNotesMode;
-            e.target.classList.toggle('active');
-            this.showMessage(this.game.isNotesMode ? 'Notes mode ON' : 'Notes mode OFF');
-        });
-    }
-
     setupEraseButton() {
-        document.getElementById('erase').addEventListener('click', () => {
-            if (this.game.selectedCell) {
-                if (this.game.erase()) {
-                    this.render();
-                } else {
-                    this.showMessage('Cannot erase this cell!');
-                }
-            } else {
-                this.showMessage('Please select a cell first!');
-            }
-        });
-    }
-
-    setupUndoRedoButtons() {
-        document.getElementById('undo').addEventListener('click', () => {
-            if (this.game.undo()) {
-                this.render();
-            }
-        });
-
-        document.getElementById('redo').addEventListener('click', () => {
-            if (this.game.redo()) {
-                this.render();
-            }
-        });
-    }
-
-    setupNumberPad() {
-        // Add event listeners for number pad buttons
-        document.querySelectorAll('.number').forEach(button => {
-            button.addEventListener('click', async () => {
-                const number = parseInt(button.dataset.number);
+        const eraseButton = document.getElementById('erase');
+        if (eraseButton) {
+            eraseButton.addEventListener('click', () => {
                 if (this.game.selectedCell) {
-                    const valid = await this.game.makeMove(number);
-                    if (valid) {
+                    if (this.game.erase()) {
                         this.render();
-                        const result = await this.game.checkSolution();
-                        if (result.solved) {
-                            this.showMessage('Congratulations! You solved the puzzle!');
-                            this.disableGameControls();
-                            this.showDownloadButton();
-                        }
                     } else {
-                        this.showMessage('Invalid move!');
+                        this.showMessage('Cannot erase this cell!');
                     }
                 } else {
                     this.showMessage('Please select a cell first!');
                 }
             });
+        }
+    }
+
+    setupUndoRedoButtons() {
+        const undoButton = document.getElementById('undo');
+        const redoButton = document.getElementById('redo');
+        
+        if (undoButton) {
+            undoButton.addEventListener('click', () => {
+                if (this.game.undo()) {
+                    this.render();
+                }
+            });
+        }
+        
+        if (redoButton) {
+            redoButton.addEventListener('click', () => {
+                if (this.game.redo()) {
+                    this.render();
+                }
+            });
+        }
+    }
+
+    setupNumberPad() {
+        // Add event listeners for number pad buttons
+        const numberButtons = document.querySelectorAll('.number');
+        if (numberButtons.length > 0) {
+            numberButtons.forEach(button => {
+                button.addEventListener('click', async () => {
+                    const number = parseInt(button.dataset.number);
+                    if (this.game.selectedCell) {
+                        // Validate the move before making it
+                        const { row, col } = this.game.selectedCell;
+                        if (!this.game.isValidPlacement(this.game.grid, row, col, number)) {
+                            // Invalid move: animate cell and show message
+                            const cellIndex = row * 9 + col;
+                            const cell = document.querySelectorAll('.cell')[cellIndex];
+                            if (cell) {
+                                cell.classList.add('cell-invalid');
+                                setTimeout(() => cell.classList.remove('cell-invalid'), 1000);
+                            }
+                            this.showMessage('Invalid move! This number conflicts with Sudoku rules.', 2000);
+                            return;
+                        }
+                        const valid = await this.game.makeMove(number);
+                        if (valid) {
+                            this.render();
+                            const result = await this.game.checkSolution();
+                            if (result.solved) {
+                                this.showMessage('✅ Puzzle solved correctly!', 3000);
+                            }
+                        }
+                    }
+                });
+            });
+        }
+    }
+
+    setupDocumentButton() {
+        const generateDocButton = document.getElementById('generate-doc-button');
+        if (!generateDocButton) return;
+
+        generateDocButton.addEventListener('click', async () => {
+            try {
+                generateDocButton.disabled = true;
+                generateDocButton.textContent = 'Generating PDF...';
+                
+                // Restore: just call the document generator, which will trigger the download
+                await this.documentGenerator.generateSolutionDocument();
+                
+                this.showMessage('PDF generated successfully!');
+            } catch (error) {
+                console.error('Error generating PDF:', error);
+                this.showMessage('Error generating PDF. Please try again.');
+            } finally {
+                generateDocButton.disabled = false;
+                generateDocButton.textContent = 'Generate PDF';
+            }
         });
     }
 
-    showDownloadButton() {
-        console.log('Showing download button...'); // Debug log
-        const downloadButton = document.getElementById('generate-doc-button');
-        if (downloadButton) {
-            downloadButton.style.display = 'block';
-            console.log('Download button display set to:', downloadButton.style.display); // Debug log
-        } else {
-            console.log('Download button not found in DOM'); // Debug log
+    updateDocumentButtonVisibility() {
+        const generateDocButton = document.getElementById('generate-doc-button');
+        if (generateDocButton) {
+            generateDocButton.style.display = this.game.isComplete() ? 'block' : 'none';
         }
     }
 
@@ -250,6 +263,19 @@ class SudokuUI {
 
         this.updateHintButton();
         this.updateNumberPad();
+
+        // After rendering the grid, animate invalid cell if needed
+        if (this.game && this.game.lastInvalidCell) {
+            const { row, col } = this.game.lastInvalidCell;
+            const cellIndex = row * 9 + col;
+            const cell = document.querySelectorAll('.cell')[cellIndex];
+            if (cell) {
+                cell.classList.add('cell-invalid');
+                setTimeout(() => cell.classList.remove('cell-invalid'), 1000);
+            }
+            // Clear the invalid cell after animation
+            this.game.lastInvalidCell = null;
+        }
     }
 
     createCell(row, col) {
@@ -477,6 +503,66 @@ class SudokuUI {
     }
 
     showStep(step, isAutoPlay = false, onSpeechEnd = null) {
+        console.log('showStep called with:', step);
+        
+        // Validate step object
+        if (!step) {
+            console.error('No step provided to showStep');
+            return;
+        }
+        
+        if (typeof step !== 'object' || step === null) {
+            console.error('Invalid step object (not an object):', step);
+            return;
+        }
+        
+        // Ensure required properties exist with defaults
+        const safeStep = {
+            row: typeof step.row === 'number' ? step.row : -1,
+            col: typeof step.col === 'number' ? step.col : -1,
+            value: typeof step.value === 'number' ? step.value : 0,
+            technique: step.technique || 'Unknown',
+            reason: step.reason || step.message || 'No explanation provided',
+            difficulty: step.difficulty || 'Medium',
+            why: step.why || step.reason || step.message || 'No explanation provided'
+        };
+        
+        // Log the step for debugging
+        console.log('Processing step:', safeStep);
+        
+        // Format the technique name for display
+        const formattedTechnique = safeStep.technique
+            .replace(/([A-Z])/g, ' $1')
+            .replace(/^./, str => str.toUpperCase())
+            .trim();
+            
+        // Set difficulty class for styling
+        const difficulty = safeStep.difficulty || 'Medium';
+        const difficultyClass = difficulty.toLowerCase().replace(/\s+/g, '-');
+        const reason = safeStep.reason || 'No reason provided';
+        if (!step) {
+            console.error('No step provided to showStep');
+            return;
+        }
+
+        // Validate step object
+        if (typeof step !== 'object' || step === null) {
+            console.error('Invalid step object:', step);
+            return;
+        }
+
+        // Validate required step properties
+        if (typeof step.row === 'undefined' || typeof step.col === 'undefined' || typeof step.value === 'undefined') {
+            console.error('Step is missing required properties (row, col, or value):', step);
+            return;
+        }
+
+        // Additional guard: skip if row, col, or value are not valid numbers
+        if (isNaN(Number(step.row)) || isNaN(Number(step.col)) || isNaN(Number(step.value))) {
+            console.error('Step has invalid row, col, or value (NaN):', step);
+            return;
+        }
+
         const stepInfo = document.getElementById('step-info');
         if (!stepInfo) return;
 
@@ -488,97 +574,176 @@ class SudokuUI {
             const formattedTechnique = technique.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
             const difficultyClass = difficulty.toLowerCase().replace(/\s+/g, '-');
             const techniqueExplanations = {
-                // Singles
-                'Naked Single': 'Naked Single: Only one candidate remains for this cell, so it must be placed here.',
-                'Hidden Single': 'Hidden Single: A digit can only go in one cell within a unit (row, column, or box).',
-                'Full House': 'Full House (Last Digit): Only one empty cell remains in a unit, so the missing digit must go there.',
-                // Intersections
-                'Locked Candidates Type 1 (Pointing)': 'Locked Candidates Type 1 (Pointing): All candidates for a digit in a box are confined to a single row or column, so that digit can be eliminated from the rest of that row or column.',
-                'Locked Candidates Type 2 (Claiming)': 'Locked Candidates Type 2 (Claiming): All candidates for a digit in a row or column are confined to a single box, so that digit can be eliminated from the rest of that box.',
-                // Hidden Subsets
-                'Hidden Pair': 'Hidden Pair: Two digits can only go in two cells within a unit, so all other candidates can be removed from those cells.',
-                'Hidden Triple': 'Hidden Triple: Three digits can only go in three cells within a unit, so all other candidates can be removed from those cells.',
-                'Hidden Quadruple': 'Hidden Quadruple: Four digits can only go in four cells within a unit, so all other candidates can be removed from those cells.',
+                // ===== BASIC TECHNIQUES =====
+                'Naked Single': 'A cell has only one possible candidate remaining. This is the simplest technique where a cell can be filled with certainty.',
+                'Hidden Single': 'In a row, column, or box, a digit has only one possible cell where it can be placed, even though other candidates might exist in that cell.',
+                'Full House': 'When all but one cell in a row, column, or box are filled, the last empty cell must contain the missing digit.',
+                
+                // ===== HIDDEN SINGLE VARIATIONS =====
+                'Hidden Single Row': 'A digit can only appear in one cell of a row, even though other candidates exist in that cell. The digit is "hidden" among other candidates in that cell.',
+                'Hidden Single Column': 'A digit can only appear in one cell of a column, even though other candidates exist in that cell. The digit is "hidden" among other candidates in that cell.',
+                'Hidden Single Box': 'A digit can only appear in one cell of a box, even though other candidates exist in that cell. The digit is "hidden" among other candidates in that cell.',
+                
+                // ===== INTERSECTIONS (LOCKED CANDIDATES) =====
+                'Locked Candidates Type 1 (Pointing)': 'When all candidates for a digit in a box are confined to a single row or column, that digit can be eliminated from the rest of that row or column outside the box.',
+                'Locked Candidates Type 2 (Claiming)': 'When all candidates for a digit in a row or column are confined to a single box, that digit can be eliminated from the rest of that box.',
+                
+                // ===== SUBSETS =====
                 // Naked Subsets
-                'Naked Pair': 'Naked Pair: Two cells in a unit contain only the same two candidates, so those candidates can be removed from other cells in the unit.',
-                'Naked Triple': 'Naked Triple: Three cells in a unit contain only the same three candidates, so those candidates can be removed from other cells in the unit.',
-                'Naked Quadruple': 'Naked Quadruple: Four cells in a unit contain only the same four candidates, so those candidates can be removed from other cells in the unit.',
-                // Fish
-                'X-Wing': 'X-Wing: A digit appears in exactly two cells in two different rows and columns, forming a rectangle. This allows elimination of that digit from other cells in those columns/rows.',
-                'Swordfish': 'Swordfish: Like X-Wing, but with three rows and columns.',
-                'Jellyfish': 'Jellyfish: Like X-Wing, but with four rows and columns.',
+                'Naked Pair': 'Two cells in a unit contain exactly the same two candidates. These candidates can be removed from all other cells in the unit.',
+                'Naked Triple': 'Three cells in a unit contain exactly three candidates between them. These candidates can be removed from other cells in the unit.',
+                'Naked Quadruple': 'Four cells in a unit contain exactly four candidates between them. These candidates can be removed from other cells in the unit.',
+                
+                // Hidden Subsets
+                'Hidden Pair': 'Two digits appear in exactly two cells of a unit, with other candidates in those cells. All other candidates can be removed from these two cells.',
+                'Hidden Triple': 'Three digits appear in exactly three cells of a unit, with other candidates in those cells. All other candidates can be removed from these three cells.',
+                'Hidden Quadruple': 'Four digits appear in exactly four cells of a unit, with other candidates in those cells. All other candidates can be removed from these four cells.',
+                
+                // ===== FISH PATTERNS =====
+                // Basic Fish
+                'X-Wing': 'A digit forms a rectangle with exactly two possible positions in two rows and two columns. This allows elimination of that digit from other cells in those columns/rows.',
+                'Swordfish': 'A digit has exactly two or three possible positions in three rows and three columns. This allows elimination of that digit from other cells in those columns/rows.',
+                'Jellyfish': 'A digit has exactly two, three, or four possible positions in four rows and four columns. This allows elimination of that digit from other cells in those columns/rows.',
+                'Hidden Row': 'A digit is restricted to a single row within a box across multiple boxes, allowing elimination of that digit from the rest of the row outside these boxes.',
+                'Hidden Column': 'A digit is restricted to a single column within a box across multiple boxes, allowing elimination of that digit from the rest of the column outside these boxes.',
+                'Hidden Pair Row': 'Two digits are restricted to the same two cells in a row, allowing elimination of other candidates from those cells.',
+                'Hidden Pair Column': 'Two digits are restricted to the same two cells in a column, allowing elimination of other candidates from those cells.',
+                'Hidden Triple Row': 'Three digits are restricted to the same three cells in a row, allowing elimination of other candidates from those cells.',
+                'Hidden Triple Column': 'Three digits are restricted to the same three cells in a column, allowing elimination of other candidates from those cells.',
+                
                 // Finned/Sashimi Fish
-                'Finned X-Wing': 'Finned X-Wing: An X-Wing with an extra candidate (the fin) that allows for additional eliminations.',
-                'Finned Swordfish': 'Finned Swordfish: A Swordfish with a fin.',
-                'Finned Jellyfish': 'Finned Jellyfish: A Jellyfish with a fin.',
+                'Finned X-Wing': 'Similar to X-Wing, but with one or more additional candidates (fins) in one of the boxes, allowing for additional eliminations.',
+                'Finned Swordfish': 'A Swordfish pattern with one or more additional candidates (fins) in one of the boxes.',
+                'Finned Jellyfish': 'A Jellyfish pattern with one or more additional candidates (fins) in one of the boxes.',
+                
                 // Complex Fish
-                'Franken Fish': 'Franken Fish: A fish pattern that uses non-standard blocks.',
-                'Mutant Fish': 'Mutant Fish: A fish pattern that uses both rows and columns as base/cover sets.',
-                'Siamese Fish': 'Siamese Fish: Two fish patterns sharing base sets.',
-                // Single Digit Patterns
-                'Skyscraper': 'Skyscraper: A digit forms a strong link in two rows/columns, allowing eliminations.',
-                '2-String Kite': '2-String Kite: A pattern combining strong links in a row and column.',
-                'Turbot Fish': 'Turbot Fish: A pattern combining strong links in rows and columns.',
-                'Empty Rectangle': 'Empty Rectangle: A digit’s candidates in a box are limited to one row/column, allowing eliminations.',
-                // Uniqueness
-                'Unique Rectangle': 'Unique Rectangle: A pattern that would allow multiple solutions, so certain candidates can be eliminated.',
-                'BUG+1': 'BUG+1: Binary Universal Grave + 1. Only one cell can take a certain value to avoid multiple solutions.',
-                // Wings
-                'XY-Wing': 'XY-Wing: Three cells with specific candidate relationships allow eliminations.',
-                'XYZ-Wing': 'XYZ-Wing: An extension of XY-Wing with an additional candidate.',
-                'W-Wing': 'W-Wing: Two cells with a strong link allow eliminations.',
-                // Miscellaneous
-                'Sue de Coq': 'Sue de Coq: A complex pattern involving two sets of cells and candidates.',
-                'Coloring': 'Coloring: Using colors to track strong/weak links and make eliminations.',
-                // Chains and Loops
-                'Remote Pair': 'Remote Pair: A chain of cells with the same two candidates allows eliminations.',
-                'X-Chain': 'X-Chain: A chain of strong links for a single digit.',
-                'XY-Chain': 'XY-Chain: A chain of cells with alternating candidates allows eliminations.',
-                'Nice Loop': 'Nice Loop (AIC): Alternating Inference Chains and Nice Loops for advanced eliminations.',
-                // ALS
-                'ALS-XZ': 'ALS-XZ: Almost Locked Set XZ rule for advanced eliminations.',
-                'ALS-XY-Wing': 'ALS-XY-Wing: An ALS-based extension of the XY-Wing.',
-                'ALS Chain': 'ALS Chain: A chain of Almost Locked Sets.',
-                'Death Blossom': 'Death Blossom: A complex pattern involving multiple ALS.',
-                // Last Resort
-                'Templates': 'Templates: Template-based solving approach.',
-                'Forcing Chain': 'Forcing Chain: Chain-based forcing pattern.',
-                'Forcing Net': 'Forcing Net: Network of forcing chains.',
-                'Kraken Fish': 'Kraken Fish: Complex fish pattern with additional candidates.',
-                'Brute Force': 'Brute Force: Last resort solving method, tries all possibilities.'
+                'Franken Fish': 'A fish pattern where the base or cover sets include both complete units (rows/columns) and partial units (boxes).',
+                'Mutant Fish': 'A fish pattern where the base and cover sets can be any combination of rows, columns, and boxes.',
+                'Siamese Fish': 'Two fish patterns that share some base or cover sets, allowing for combined eliminations.',
+                'Kraken Fish': 'An advanced fish pattern that includes additional candidates that don\'t fit the standard fish pattern but still allow eliminations.',
+                
+                // ===== SINGLE DIGIT PATTERNS =====
+                'Skyscraper': 'A digit forms a strong link in two rows/columns that share a box, allowing eliminations where the base cells see both towers.',
+                '2-String Kite': 'A digit has exactly two candidates in a row and column that intersect in a box, allowing eliminations in cells that see both ends.',
+                'Turbot Fish': 'A single-digit pattern that combines a strong link in a row/column with a strong link in a box.',
+                'Empty Rectangle': 'A digit\'s candidates in a box are limited to one row or column, allowing eliminations in the intersecting row or column outside the box.',
+                
+                // ===== UNIQUENESS TECHNIQUES =====
+                'Unique Rectangle': 'A pattern that would lead to multiple solutions if certain candidates were not eliminated, based on the assumption that the puzzle has a unique solution.',
+                'BUG+1': 'Bivalue Universal Grave + 1: A pattern where all unsolved cells have exactly two candidates except one, which has three. The extra candidate can be placed to avoid multiple solutions.',
+                
+                // ===== WING PATTERNS =====
+                'XY-Wing': 'Three cells where one cell (the pivot) sees the other two (the pincers), and the pincers share a candidate that can be eliminated from cells that see both pincers.',
+                'XYZ-Wing': 'Similar to XY-Wing, but the pivot cell has three candidates. The extra candidate allows for additional eliminations.',
+                'ALS-XZ': 'Two Almost Locked Sets that share a restricted common candidate, allowing eliminations based on the interaction between the sets.',
+                'ALS-XY-Wing': 'An extension of XY-Wing using Almost Locked Sets instead of single cells, allowing for more complex interactions.',
+                'ALS-Chain': 'A chain of Almost Locked Sets connected by restricted common candidates, similar to an XY-Chain but with sets instead of single cells.',
+                'Death Blossom': 'A complex pattern where one cell (the stem) sees multiple Almost Locked Sets (the petals), allowing for advanced eliminations.',
+                
+                // ===== LAST RESORT TECHNIQUES =====
+                'Brute Force': 'A last-resort method that tries all possible candidates until a solution is found.',
+                'Guess': 'Making an educated guess when no logical moves are available.',
+                'Trial and Error': 'Trying different values and backtracking when a contradiction is found.'
             };
-            let techniqueDescription = techniqueExplanations[formattedTechnique] || `${formattedTechnique} is a Sudoku technique.`;
+            // Get technique description or use a default
+            let techniqueDescription = techniqueExplanations[formattedTechnique] || 
+                `${formattedTechnique} is a Sudoku solving technique.`;
+                
+            // Build the step info HTML safely
+            const locationText = safeStep.row >= 0 && safeStep.col >= 0 
+                ? `Row ${safeStep.row + 1}, Column ${safeStep.col + 1}: Place ${safeStep.value}`
+                : `Place ${safeStep.value}`;
+                
+            // Set the step info HTML
             stepInfo.innerHTML = `
                 <div class="step-header">
                     <span class="strategy-badge ${difficultyClass}">${formattedTechnique}</span>
                     <span class="difficulty-badge ${difficultyClass}">${difficulty}</span>
                 </div>
                 <p class="technique-explanation"><strong>About this technique:</strong> ${techniqueDescription}</p>
-                <p class="step-location">Row ${step.row + 1}, Column ${step.col + 1}: Place ${step.value}</p>
+                <p class="step-location">${locationText}</p>
                 <p class="step-reason">${reason}</p>
             `;
-            let why = step.why || reason;
-            let explanation = `${formattedTechnique} technique is used here. ${techniqueDescription} Placing ${step.value} at row ${step.row + 1}, column ${step.col + 1}. ${why} This was the best move because: ${reason}.`;
+            // Build the explanation text safely
+            const locationSpeech = safeStep.row >= 0 && safeStep.col >= 0 
+                ? `at row ${safeStep.row + 1}, column ${safeStep.col + 1}`
+                : '';
+                
+            let explanation = `${formattedTechnique} technique is used here. ${techniqueDescription} `;
+            explanation += `Placing ${safeStep.value} ${locationSpeech}. `;
+            explanation += `${safeStep.why || reason} This was the best move because: ${reason}.`;
             const msg = new SpeechSynthesisUtterance(explanation);
             window.speechSynthesis.cancel();
             if (isAutoPlay && typeof onSpeechEnd === 'function') {
                 msg.onend = onSpeechEnd;
             }
             window.speechSynthesis.speak(msg);
-            this.game.grid[step.row][step.col] = {
-                value: step.value,
-                isFixed: false,
-                notes: new Set()
-            };
-            this.render();
-            const cells = document.querySelectorAll('.cell');
-            const cellIndex = step.row * 9 + step.col;
-            const cell = cells[cellIndex];
-            if (cell) {
-                cells.forEach(c => c.classList.remove('solution-highlight'));
-                cell.classList.add('solution-highlight');
+            
+            // Only update the game grid if we have valid coordinates
+            if (safeStep.row >= 0 && safeStep.row < 9 && safeStep.col >= 0 && safeStep.col < 9) {
+                try {
+                    // First, validate the game and grid
+                    if (!this.game) {
+                        throw new Error('Game instance not found in showStep');
+                    }
+                    
+                    // Initialize the grid if it doesn't exist
+                    if (!this.game.grid) {
+                        console.log('Initializing game grid in showStep');
+                        this.game.grid = Array(9).fill().map(() => 
+                            Array(9).fill().map(() => ({
+                                value: 0,
+                                isFixed: false,
+                                notes: new Set()
+                            }))
+                        );
+                    }
+                    
+                    // Validate grid structure
+                    if (!Array.isArray(this.game.grid) || this.game.grid.length !== 9) {
+                        throw new Error('Invalid game grid structure');
+                    }
+                    
+                    // Ensure the row exists
+                    if (!this.game.grid[safeStep.row]) {
+                        this.game.grid[safeStep.row] = [];
+                    }
+                    
+                    // Ensure the cell exists and has the correct structure
+                    if (!this.game.grid[safeStep.row][safeStep.col]) {
+                        this.game.grid[safeStep.row][safeStep.col] = {
+                            value: 0,
+                            isFixed: false,
+                            notes: new Set()
+                        };
+                    }
+                    
+                    // Re-render the grid to show the update
+                    this.render();
+                    
+                    // Highlight the cell that was just updated
+                    const cells = document.querySelectorAll('.cell');
+                    const cellIndex = safeStep.row * 9 + safeStep.col;
+                    if (cellIndex >= 0 && cellIndex < cells.length) {
+                        const cell = cells[cellIndex];
+                        if (cell) {
+                            // Remove highlight from all cells
+                            cells.forEach(c => c.classList.remove('highlight', 'solution-highlight'));
+                            // Add highlight to the current cell
+                            cell.classList.add('solution-highlight');
+                        }
+                    }
+                    
+                } catch (error) {
+                    console.error('Error in showStep:', error);
+                    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+                    this.showMessage(`Error: ${errorMessage}`);
+                }
+            } else {
+                console.warn('Invalid cell coordinates in showStep:', safeStep.row, safeStep.col);
             }
         }
+        this.updateDocumentButtonVisibility();
     }
 
     showSolutionPanel(solutionPath) {
@@ -762,13 +927,6 @@ class SudokuUI {
         // Update other UI elements as needed
     }
 
-    updateDocumentButtonVisibility() {
-        const generateDocButton = document.getElementById('generate-doc-button');
-        if (generateDocButton) {
-            generateDocButton.style.display = this.game.isPlaying ? 'block' : 'none';
-        }
-    }
-
     updateNumberPad() {
         const counts = this.game.getNumberCounts();
         document.querySelectorAll('.numbers .number').forEach(button => {
@@ -795,13 +953,27 @@ class SudokuUI {
         });
     }
 
-    fillBoardWithSolution(solutionPath) {
+    async fillBoardWithSolution(solutionPath) {
         if (!solutionPath) return;
-        solutionPath.forEach(step => {
+        // Clear previous steps before filling
+        this.game.allSolutionSteps = [];
+        for (const step of solutionPath) {
             if (step && typeof step.row === 'number' && typeof step.col === 'number' && typeof step.value === 'number') {
                 this.game.grid[step.row][step.col].value = step.value;
+                // Record the step for PDF generation
+                this.game.allSolutionSteps.push({
+                    ...step,
+                    timestamp: Date.now()
+                });
+                // Animate each step
+                this.render();
+                await new Promise(res => setTimeout(res, 120));
             }
-        });
+        }
         this.render();
+        this.updateDocumentButtonVisibility();
     }
 }
+
+// Expose SudokuUI to the global scope
+window.SudokuUI = SudokuUI;

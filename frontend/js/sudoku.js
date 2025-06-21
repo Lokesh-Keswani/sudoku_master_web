@@ -69,10 +69,63 @@ class SudokuGame {
         // Initialize audio context
         this.initializeAudioTrainer();
 
+        // Initialize solving techniques
+        this.techniques = window.SudokuTechniques ? new window.SudokuTechniques() : null;
+        
+        // Initialize technique availability
+        this.initializeTechniques();
+
         // Integrate advanced techniques
         this.techniques = new window.SudokuTechniques();
+
+        // Add lastInvalidCell property
+        this.lastInvalidCell = null;
     }
 
+    initializeTechniques() {
+        if (!this.techniques) {
+            console.warn('Advanced solving techniques not available');
+            this.availableTechniques = [];
+            return;
+        }
+
+        // Define available techniques in order of complexity
+        this.availableTechniques = [
+            'nakedSingle',
+            'hiddenSingle',
+            'nakedPair',
+            'pointingPair',
+            'hiddenPair',
+            'nakedTriple',
+            'hiddenTriple',
+            'xWing',
+            'swordfish',
+            'xyWing',
+            'xyzWing',
+            'uniqueRectangle',
+            'skyscraper',
+            'twoStringKite',
+            'turbotFish'
+        ];
+        
+        // Initialize technique scores based on difficulty
+        this.techniqueScores = {
+            'nakedSingle': 10,
+            'hiddenSingle': 20,
+            'nakedPair': 30,
+            'pointingPair': 35,
+            'hiddenPair': 40,
+            'nakedTriple': 45,
+            'hiddenTriple': 50,
+            'xWing': 60,
+            'swordfish': 70,
+            'xyWing': 80,
+            'xyzWing': 85,
+            'uniqueRectangle': 90,
+            'skyscraper': 95,
+            'turbotFish': 100
+        };
+    }
     async newGame(difficulty = 'medium') {
         try {
             const response = await fetch(`${this.apiUrl}/api/sudoku/new`, {
@@ -491,70 +544,80 @@ class SudokuGame {
     }
 
     analyzeMoveQuality(grid, row, col, value) {
-        // Use advanced techniques from SudokuTechniques
-        // 1. Try all techniques in order of difficulty
-        // 2. Return the first applicable step
-        // 3. Fallback to legacy logic if needed
+        // First check if the move is valid
+        if (grid[row][col] !== 0) return null;
+        
         const candidates = this.getCellPossibilities(grid, row, col);
         if (!candidates.has(value)) return null;
-        // Prepare a cell grid for techniques (with candidates)
-        const cellGrid = grid.map((rowArr, r) => rowArr.map((v, c) => ({
-            value: v,
-            candidates: this.getCellPossibilities(grid, r, c)
-        })));
-        // Try each technique in order
-        const techniquesToTry = [
-            'findFullHouse',
-            'findHiddenSingle',
-            'findNakedSingle',
-            'findLockedCandidatesType1',
-            'findLockedCandidatesType2',
-            'findHiddenPair',
-            'findHiddenTriple',
-            'findHiddenQuadruple',
-            'findNakedPair',
-            'findNakedTriple',
-            'findNakedQuadruple',
-            'findBasicFish',
-            'findFinnedFish',
-            'findComplexFish',
-            'findSkyscraper',
-            // ...add all other implemented techniques here...
-        ];
-        for (const tech of techniquesToTry) {
-            if (typeof this.techniques[tech] === 'function') {
-                const step = this.techniques[tech](cellGrid);
-                if (step && step.cells && step.cells.some(cell => cell.row === row && cell.col === col && (cell.value === value || cell.value === null))) {
-                    // Format for UI
-                    return {
-                        technique: step.type,
-                        row,
-                        col,
-                        value,
-                        reason: step.explanation || '',
-                        eliminations: step.eliminations || [],
-                        difficulty: step.difficulty || 'Advanced',
-                        timestamp: Date.now()
-                    };
+        
+        // Try advanced techniques if available
+        if (this.techniques && this.availableTechniques.length > 0) {
+            // Prepare cell grid with candidates for advanced techniques
+            const cellGrid = grid.map((rowArr, r) => rowArr.map((v, c) => ({
+                value: v,
+                candidates: this.getCellPossibilities(grid, r, c),
+                row: r,
+                col: c,
+                isGiven: v !== 0
+            })));
+            
+            // Try each technique in order of complexity
+            for (const tech of this.availableTechniques) {
+                try {
+                    const techMethod = `find${tech.charAt(0).toUpperCase() + tech.slice(1)}`;
+                    if (typeof this.techniques[techMethod] === 'function') {
+                        const result = this.techniques[techMethod](cellGrid, { row, col, value });
+                        
+                        if (result && result.isValid) {
+                            return {
+                                row,
+                                col,
+                                value,
+                                technique: tech,
+                                score: this.techniqueScores[tech] || 100,
+                                reason: result.reason || `Applied ${tech} technique`,
+                                affectedCells: result.affectedCells || this.getAffectedCells(grid, row, col, value),
+                                eliminations: result.eliminations || [],
+                                details: result.details || {},
+                                timestamp: Date.now()
+                            };
+                        }
+                    }
+                } catch (e) {
+                    console.warn(`Error applying technique ${tech}:`, e);
                 }
             }
         }
-        // Fallback to legacy logic
+        
+        // Fallback to basic analysis if no advanced technique applies
+        return this.basicAnalyzeMoveQuality(grid, row, col, value);
+    }
+    
+    basicAnalyzeMoveQuality(grid, row, col, value) {
+        // Basic validation
+        if (grid[row][col] !== 0) return null;
+        
+        // Check if the move is valid
+        if (!this.isValidPlacement(grid, row, col, value)) {
+            return null;
+        }
+        
         const moveInfo = {
             row,
             col,
             value,
-            score: 0,
+            score: 100, // Default score for basic moves
             technique: 'logical_deduction',
-            reason: '',
+            reason: 'Basic logical deduction',
+            affectedCells: this.getAffectedCells(grid, row, col, value),
             timestamp: Date.now()
         };
-
+        
         // Check for Full House (Last Digit)
         const fullHouseType = this.isFullHouse(grid, row, col, value);
         if (fullHouseType) {
             moveInfo.technique = 'full_house';
-            moveInfo.score = 1;
+            moveInfo.score = 10;
             moveInfo.reason = `Last empty cell in ${fullHouseType}`;
             return moveInfo;
         }
@@ -562,69 +625,28 @@ class SudokuGame {
         // Check for naked single
         if (this.isNakedSingle(grid, row, col)) {
             moveInfo.technique = 'naked_single';
-            moveInfo.score = 1;
+            moveInfo.score = 20;
             moveInfo.reason = 'Only one possible value for this cell';
             return moveInfo;
         }
 
-        // Check for hidden single in row
-        if (this.isHiddenSingle(grid, row, col, value, 'row')) {
-            moveInfo.technique = 'hidden_single_row';
-            moveInfo.score = 2;
-            moveInfo.reason = `Only possible position for ${value} in this row`;
+        // Check for hidden single
+        const hiddenSingleType = this.isHiddenSingle(grid, row, col, value, 'row') ? 'row' :
+                               this.isHiddenSingle(grid, row, col, value, 'col') ? 'col' :
+                               this.isHiddenSingle(grid, row, col, value, 'box') ? 'box' : null;
+                               
+        if (hiddenSingleType) {
+            moveInfo.technique = `hidden_single_${hiddenSingleType}`;
+            moveInfo.score = 30;
+            moveInfo.reason = `Only possible cell for ${value} in this ${hiddenSingleType}`;
             return moveInfo;
         }
-
-        // Check for hidden single in column
-        if (this.isHiddenSingle(grid, row, col, value, 'column')) {
-            moveInfo.technique = 'hidden_single_column';
-            moveInfo.score = 2;
-            moveInfo.reason = `Only possible position for ${value} in this column`;
-            return moveInfo;
-        }
-
-        // Check for hidden single in box
-        if (this.isHiddenSingle(grid, row, col, value, 'box')) {
-            moveInfo.technique = 'hidden_single_box';
-            moveInfo.score = 2;
-            moveInfo.reason = `Only possible position for ${value} in this box`;
-            return moveInfo;
-        }
-
-        // Check for hidden subset
-        const hiddenSubset = this.findHiddenSubset(grid, row, col, value, 'row') ||
-                           this.findHiddenSubset(grid, row, col, value, 'column') ||
-                           this.findHiddenSubset(grid, row, col, value, 'box');
-        if (hiddenSubset) {
-            moveInfo.technique = hiddenSubset.type;
-            moveInfo.score = 3;
-            moveInfo.reason = `Forms a ${hiddenSubset.type} with candidates ${hiddenSubset.candidates.join(', ')}`;
-            return moveInfo;
-        }
-
-        // Check for naked subset
-        const nakedSubset = this.findNakedSubset(grid, row, col, value);
-        if (nakedSubset) {
-            moveInfo.technique = nakedSubset.type;
-            moveInfo.score = 3;
-            moveInfo.reason = `Forms a ${nakedSubset.type} with candidates ${nakedSubset.candidates.join(', ')}`;
-            return moveInfo;
-        }
-
-        // Check for intersection
-        const intersectionType = this.isIntersection(grid, row, col, value);
-        if (intersectionType) {
-            moveInfo.technique = 'intersection';
-            moveInfo.score = 3;
-            moveInfo.reason = `Forms an intersection pattern in ${intersectionType}`;
-            return moveInfo;
-        }
-
+        
         // Check for locked candidate
         const lockedCandidateType = this.isLockedCandidate(grid, row, col, value);
         if (lockedCandidateType) {
             moveInfo.technique = 'locked_candidate';
-            moveInfo.score = 3;
+            moveInfo.score = 40;
             moveInfo.reason = `Forms a ${lockedCandidateType} pattern`;
             return moveInfo;
         }
@@ -633,7 +655,7 @@ class SudokuGame {
         const fish = this.findFish(grid, row, col, value);
         if (fish) {
             moveInfo.technique = fish.type;
-            moveInfo.score = 4;
+            moveInfo.score = 50;
             moveInfo.reason = `Forms a ${fish.type} pattern in ${fish.unit}s ${fish.cells.map(c => c.row + 1).join(', ')}`;
             return moveInfo;
         }
@@ -642,7 +664,7 @@ class SudokuGame {
         const uniqueRect = this.findUniqueRectangle(grid, row, col, value);
         if (uniqueRect) {
             moveInfo.technique = 'unique_rectangle';
-            moveInfo.score = 4;
+            moveInfo.score = 60;
             moveInfo.reason = `Forms a unique rectangle with shared candidates ${uniqueRect.sharedCandidates.join(', ')}`;
             return moveInfo;
         }
@@ -1392,15 +1414,349 @@ class SudokuGame {
         return steps;
     }
 
-    isGridComplete(grid) {
+    // Game state methods
+    isComplete() {
         for (let row = 0; row < 9; row++) {
             for (let col = 0; col < 9; col++) {
-                if (grid[row][col].value === 0) {
+                if (this.grid[row][col].value === 0) {
                     return false;
                 }
             }
         }
         return true;
+    }
+
+    // Check if the current grid is valid
+    isValid() {
+        // Check rows
+        for (let row = 0; row < 9; row++) {
+            const seen = new Set();
+            for (let col = 0; col < 9; col++) {
+                const value = this.grid[row][col].value;
+                if (value !== 0 && seen.has(value)) return false;
+                if (value !== 0) seen.add(value);
+            }
+        }
+
+        // Check columns
+        for (let col = 0; col < 9; col++) {
+            const seen = new Set();
+            for (let row = 0; row < 9; row++) {
+                const value = this.grid[row][col].value;
+                if (value !== 0 && seen.has(value)) return false;
+                if (value !== 0) seen.add(value);
+            }
+        }
+
+        // Check 3x3 boxes
+        for (let boxRow = 0; boxRow < 3; boxRow++) {
+            for (let boxCol = 0; boxCol < 3; boxCol++) {
+                const seen = new Set();
+                for (let row = boxRow * 3; row < boxRow * 3 + 3; row++) {
+                    for (let col = boxCol * 3; col < boxCol * 3 + 3; col++) {
+                        const value = this.grid[row][col].value;
+                        if (value !== 0 && seen.has(value)) return false;
+                        if (value !== 0) seen.add(value);
+                    }
+                }
+            }
+        }
+
+        return true;
+    }
+
+    // Check solution using advanced techniques
+    async checkSolution() {
+        try {
+            console.log('Starting checkSolution...');
+            
+            // First check if the current state is valid
+            const isValid = this.isValid();
+            console.log('Board validity check:', isValid);
+            
+            if (!isValid) {
+                // Find conflicts to give more specific feedback
+                const conflicts = this.findConflicts();
+                console.log('Found conflicts:', conflicts);
+                
+                if (conflicts.length > 0) {
+                    return { 
+                        valid: false, 
+                        message: `Invalid board: ${conflicts[0].reason}`,
+                        conflicts: conflicts,
+                        showSolution: true
+                    };
+                }
+                return { 
+                    valid: false, 
+                    message: 'The current board has conflicts!',
+                    showSolution: true
+                };
+            }
+
+            // Check if the puzzle is already solved
+            const isComplete = this.isComplete();
+            console.log('Board complete check:', isComplete);
+            
+            if (isComplete) {
+                return { 
+                    solved: true, 
+                    valid: true, 
+                    message: 'Puzzle solved correctly!',
+                    showSolution: false
+                };
+            }
+
+            // Make a copy of the current grid to work with
+            const gridCopy = JSON.parse(JSON.stringify(this.grid));
+            console.log('Grid copied for analysis');
+            
+            // Try to find the next step using advanced techniques
+            console.log('Looking for next step...');
+            const nextStep = await this.findNextStep(gridCopy);
+            console.log('Next step found:', nextStep);
+            
+            if (nextStep) {
+                // Ensure the step has all required properties
+                const formattedStep = {
+                    row: typeof nextStep.row === 'number' ? nextStep.row : 0,
+                    col: typeof nextStep.col === 'number' ? nextStep.col : 0,
+                    value: typeof nextStep.value === 'number' ? nextStep.value : 0,
+                    technique: nextStep.technique || 'Basic',
+                    reason: nextStep.reason || nextStep.message || 'Next step found',
+                    difficulty: nextStep.difficulty || 'Easy',
+                    why: nextStep.why || `Found using ${nextStep.technique || 'Basic'} technique`,
+                    ...nextStep // Spread any additional properties
+                };
+                
+                console.log('Formatted step:', formattedStep);
+                
+                return {
+                    valid: true,
+                    message: `Next step: ${formattedStep.technique}`,
+                    technique: formattedStep.technique,
+                    step: formattedStep,
+                    showSolution: true
+                };
+            }
+            
+            console.log('No next step found with techniques, trying to solve...');
+            
+            // If no next step found with techniques, try to find a solution
+            const solution = this.solveSudoku(gridCopy, [], 1);
+            console.log('Solution attempt result:', solution ? `Found ${solution.length} steps` : 'No solution');
+            
+            if (solution && solution.length > 0) {
+                return {
+                    valid: true,
+                    message: 'Puzzle is solvable. Keep going!',
+                    showSolution: true,
+                    solutionPath: solution
+                };
+            }
+            
+            console.log('No valid solution found');
+            
+            return {
+                valid: false,
+                message: 'No valid moves found. The puzzle might be unsolvable from this state.',
+                showSolution: true
+            };
+        } catch (error) {
+            console.error('Error in checkSolution:', error);
+            return {
+                valid: false,
+                message: 'An error occurred while checking the solution.',
+                error: error.message,
+                showSolution: true
+            };
+        }
+    }
+    
+    // Find the next logical step in the solution
+    async findNextStep(grid) {
+        console.log('Finding next step...');
+        
+        // Ensure all candidates are up to date before running techniques
+        this.updateAllCandidates(grid);
+        
+        // Try different solving techniques in order of complexity
+        const techniques = [
+            'findNakedSingle',
+            'findHiddenSingle',
+            'findFullHouse',
+            'findLockedCandidatesType1', // Pointing
+            'findLockedCandidatesType2', // Claiming
+            // Add more only if they always return a placement
+        ];
+        
+        for (const technique of techniques) {
+            try {
+                console.log(`Trying technique: ${technique}`);
+                
+                if (this.techniques && typeof this.techniques[technique] === 'function') {
+                    const result = await this.techniques[technique](grid);
+                    
+                    if (result) {
+                        console.log(`Found step with ${technique}:`, result);
+                        
+                        // Format the technique name for display
+                        const techniqueName = technique.replace('find', '').replace(/([A-Z])/g, ' $1').trim();
+                        
+                        // Extract row, col, value from result.cells[0] if present
+                        let row = (typeof result.row === 'number') ? result.row : undefined;
+                        let col = (typeof result.col === 'number') ? result.col : undefined;
+                        let value = (typeof result.value === 'number') ? result.value : undefined;
+                        if (Array.isArray(result.cells) && result.cells.length > 0) {
+                            const cell = result.cells[0];
+                            if (typeof cell.row === 'number') row = cell.row;
+                            if (typeof cell.col === 'number') col = cell.col;
+                            if (typeof cell.value === 'number') value = cell.value;
+                        }
+                        // Only return steps that actually place a value
+                        if (
+                            typeof row === 'number' && row >= 0 && row < 9 &&
+                            typeof col === 'number' && col >= 0 && col < 9 &&
+                            typeof value === 'number' && value > 0 && value <= 9
+                        ) {
+                            // Placement step
+                            const step = {
+                                row, col, value,
+                                technique: techniqueName,
+                                strategy: techniqueName,
+                                message: result.message || result.explanation || `Found using ${techniqueName}`,
+                                reason: result.reason || result.explanation || `Found using ${techniqueName} technique`,
+                                why: result.why || result.explanation || `This is the only possible value for this cell based on ${techniqueName}.`,
+                                difficulty: result.difficulty || this.getTechniqueDifficulty(technique) || 'Medium',
+                                ...result
+                            };
+                            return step;
+                        } else {
+                            console.warn('Skipping invalid step:', { row, col, value, result });
+                            continue;
+                        }
+                    } else {
+                        console.log(`No result from ${technique}`);
+                    }
+                } else {
+                    console.warn(`Technique not found: ${technique}`);
+                }
+            } catch (error) {
+                console.error(`Error in ${technique}:`, error);
+            }
+        }
+        
+        console.log('No next step found with any technique');
+        return null;
+    }
+    
+    // Helper method to determine difficulty of techniques
+    getTechniqueDifficulty(technique) {
+        const difficultyMap = {
+            // Basic techniques
+            'findNakedSingle': 'Easy',
+            'findHiddenSingle': 'Easy',
+            
+            // Medium techniques
+            'findNakedPair': 'Medium',
+            'findHiddenPair': 'Medium',
+            'findPointingPair': 'Medium',
+            'findBoxLineReduction': 'Medium',
+            
+            // Advanced techniques
+            'findXWing': 'Hard',
+            'findSwordfish': 'Hard',
+            'findXYWing': 'Hard',
+            'findXYZWing': 'Hard',
+            'findWWing': 'Hard',
+            'findSkyscraper': 'Hard',
+            'findTwoStringKite': 'Hard',
+            'findTurbotFish': 'Hard'
+        };
+        
+        return difficultyMap[technique] || 'Medium';
+    }
+    
+    // Check if the puzzle is solvable from the current state
+    async isSolvable(grid) {
+        // Make a deep copy of the grid to avoid modifying the original
+        const gridCopy = JSON.parse(JSON.stringify(grid || this.grid));
+        
+        try {
+            // Try to solve the puzzle using a simple backtracking algorithm
+            return await this.solveWithBacktracking(gridCopy);
+        } catch (error) {
+            console.error('Error checking solvability:', error);
+            return false;
+        }
+    }
+    
+    // Simple backtracking solver to check solvability
+    async solveWithBacktracking(grid) {
+        // Find the next empty cell
+        const findEmptyCell = (grid) => {
+            for (let row = 0; row < 9; row++) {
+                for (let col = 0; col < 9; col++) {
+                    if (grid[row][col].value === 0) {
+                        return { row, col };
+                    }
+                }
+            }
+            return null; // No empty cells
+        };
+        
+        // Check if a number can be placed in a cell
+        const isValid = (grid, row, col, num) => {
+            // Check row
+            for (let x = 0; x < 9; x++) {
+                if (grid[row][x].value === num) return false;
+            }
+            
+            // Check column
+            for (let x = 0; x < 9; x++) {
+                if (grid[x][col].value === num) return false;
+            }
+            
+            // Check 3x3 box
+            const boxStartRow = Math.floor(row / 3) * 3;
+            const boxStartCol = Math.floor(col / 3) * 3;
+            for (let i = 0; i < 3; i++) {
+                for (let j = 0; j < 3; j++) {
+                    if (grid[boxStartRow + i][boxStartCol + j].value === num) {
+                        return false;
+                    }
+                }
+            }
+            
+            return true;
+        };
+        
+        // Main solving function
+        const solve = (grid) => {
+            const emptyCell = findEmptyCell(grid);
+            if (!emptyCell) return true; // Puzzle solved
+            
+            const { row, col } = emptyCell;
+            
+            for (let num = 1; num <= 9; num++) {
+                if (isValid(grid, row, col, num)) {
+                    grid[row][col].value = num;
+                    
+                    if (solve(grid)) {
+                        return true;
+                    }
+                    
+                    // Backtrack
+                    grid[row][col].value = 0;
+                }
+            }
+            
+            return false; // Trigger backtracking
+        };
+        
+        // Make a copy of the grid to avoid modifying the original
+        const gridCopy = JSON.parse(JSON.stringify(grid));
+        return solve(gridCopy);
     }
 
     getPossibleValues(grid, row, col) {
@@ -2898,4 +3254,20 @@ class SudokuGame {
             return true; // Return true to indicate game is paused
         }
     }
+
+    // Update candidates for all empty cells in the grid
+    updateAllCandidates(grid) {
+        for (let r = 0; r < 9; r++) {
+            for (let c = 0; c < 9; c++) {
+                if (grid[r][c].value === 0) {
+                    grid[r][c].candidates = this.getPossibleValues(grid, r, c);
+                } else {
+                    grid[r][c].candidates = new Set();
+                }
+            }
+        }
+    }
 }
+
+// Expose SudokuGame to the global scope
+window.SudokuGame = SudokuGame;

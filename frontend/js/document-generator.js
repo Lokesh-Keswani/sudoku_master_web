@@ -51,6 +51,7 @@ class DocumentGenerator {
         // 4. Final solved puzzle
         this.addFinalPuzzle(doc);
         
+        // Restore: let jsPDF handle the download directly
         doc.save(`sudoku-solution-${this.formatDate()}.pdf`);
     }
 

@@ -1,3 +1,4 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .routers import sudoku
@@ -28,4 +29,5 @@ app.add_middleware(
 app.include_router(sudoku.router, prefix="/api/sudoku", tags=["Sudoku"])
 
 # Serve static files from the frontend directory
-app.mount("/", StaticFiles(directory="../frontend", html=True), name="static")
+frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "frontend"))
+app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="static")
