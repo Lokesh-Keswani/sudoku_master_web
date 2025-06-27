@@ -68,6 +68,45 @@
         <div id="message" class="message"></div>
     </div>
 
+    <!-- Sidebar Overlay -->
+    <div id="sidebar-overlay"></div>
+    <!-- Sidebar Toggle Button -->
+    <button id="sidebar-toggle">☰</button>
+    <!-- Sidebar for Login and History only -->
+    <div id="auth-sidebar">
+        <button id="sidebar-close">&times;</button>
+        <h2>Account</h2>
+        <div id="auth-forms">
+            <!-- Login Form -->
+            <form id="login-form">
+                <h3>Login</h3>
+                <label for="login-username">Username</label>
+                <input type="text" id="login-username" name="username" required>
+                <label for="login-password">Password</label>
+                <input type="password" id="login-password" name="password" required>
+                <button type="submit">Login</button>
+            </form>
+            <div style="margin-top: 10px; text-align: center;">
+                <span>Don't have an account? <a href="signup.html" id="signup-link">Sign up here.</a></span>
+            </div>
+        </div>
+        <!-- Settings Section -->
+        <div id="settings-section">
+            <h3>Settings</h3>
+            <div style="margin-bottom: 14px;">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" id="dark-mode-toggle">
+                    Dark Mode
+                </label>
+            </div>
+        </div>
+        <!-- History Section -->
+        <div id="history-section">
+            <h3>History</h3>
+            <ul id="history-list"></ul>
+        </div>
+    </div>
+
     <!-- Add jsPDF library -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 

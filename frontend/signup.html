@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign Up - Sudoku Master</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body style="background: #f8f9fa; display: flex; align-items: center; justify-content: center; min-height: 100vh;">
+    <div style="background: #fff; padding: 36px 32px 32px 32px; border-radius: 14px; box-shadow: 0 4px 24px rgba(44,62,80,0.12), 0 1.5px 4px rgba(44,62,80,0.08); max-width: 350px; width: 100%;">
+        <h2 style="text-align: center; color: #344861; margin-bottom: 24px;">Sign Up</h2>
+        <form id="signup-form">
+            <label for="signup-username">Username</label>
+            <input type="text" id="signup-username" name="username" required style="width: 100%; padding: 10px 12px; margin-bottom: 12px; border: 1.5px solid #b0b8c1; border-radius: 5px; font-size: 1em; background: #f7fafd;">
+            <label for="signup-password">Password</label>
+            <input type="password" id="signup-password" name="password" required style="width: 100%; padding: 10px 12px; margin-bottom: 12px; border: 1.5px solid #b0b8c1; border-radius: 5px; font-size: 1em; background: #f7fafd;">
+            <label for="signup-confirm">Confirm Password</label>
+            <input type="password" id="signup-confirm" name="confirm" required style="width: 100%; padding: 10px 12px; margin-bottom: 18px; border: 1.5px solid #b0b8c1; border-radius: 5px; font-size: 1em; background: #f7fafd;">
+            <button type="submit" style="width: 100%; background: #4CAF50; color: white; border: none; border-radius: 5px; padding: 12px; font-size: 1em; cursor: pointer; margin-bottom: 10px;">Sign Up</button>
+        </form>
+        <div style="text-align: center; margin-top: 10px;">
+            <a href="index.html" style="color: #344861; text-decoration: underline;">Back to Main Page</a>
+        </div>
+    </div>
+    <script>
+    document.getElementById('signup-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const pw = document.getElementById('signup-password').value;
+        const confirm = document.getElementById('signup-confirm').value;
+        if (pw !== confirm) {
+            alert('Passwords do not match!');
+            return;
+        }
+        alert('Signup submitted!');
+        // TODO: Add backend integration
+    });
+    </script>
+</body>
+</html> 

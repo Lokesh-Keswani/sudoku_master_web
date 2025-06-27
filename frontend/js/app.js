@@ -195,3 +195,102 @@ window.addEventListener('load', () => {
         }
     }
 });
+
+function setupUniversalSidebar() {
+    if (window._sidebarSetup) return;
+    window._sidebarSetup = true;
+    const sidebar = document.getElementById('auth-sidebar');
+    const toggleBtn = document.getElementById('sidebar-toggle');
+    const closeBtn = document.getElementById('sidebar-close');
+    const overlay = document.getElementById('sidebar-overlay');
+    const loginForm = document.getElementById('login-form');
+    const signupForm = document.getElementById('signup-form');
+    const historyList = document.getElementById('history-list');
+
+    function openSidebar() {
+        if (sidebar) sidebar.classList.add('open');
+        if (overlay) overlay.classList.add('active');
+        if (toggleBtn) toggleBtn.classList.add('hide');
+    }
+    function closeSidebar() {
+        if (sidebar) sidebar.classList.remove('open');
+        if (overlay) overlay.classList.remove('active');
+        if (toggleBtn) toggleBtn.classList.remove('hide');
+    }
+    if (toggleBtn && sidebar) {
+        toggleBtn.addEventListener('click', openSidebar);
+    }
+    if (closeBtn && sidebar) {
+        closeBtn.addEventListener('click', closeSidebar);
+    }
+    if (overlay) {
+        overlay.addEventListener('click', closeSidebar);
+    }
+    // Login/signup logic
+    if (loginForm) {
+        loginForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            alert('Login submitted!');
+        });
+    }
+    if (signupForm) {
+        signupForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const pw = document.getElementById('signup-password').value;
+            const confirm = document.getElementById('signup-confirm').value;
+            if (pw !== confirm) {
+                alert('Passwords do not match!');
+                return;
+            }
+            alert('Signup submitted!');
+        });
+    }
+    // History logic
+    function renderHistory() {
+        if (!historyList) return;
+        const history = JSON.parse(localStorage.getItem('sudokuHistory') || '[]');
+        historyList.innerHTML = '';
+        if (history.length === 0) {
+            const li = document.createElement('li');
+            li.textContent = 'No history yet.';
+            li.style.color = '#888';
+            li.style.padding = '10px';
+            historyList.appendChild(li);
+            return;
+        }
+        history.slice().reverse().forEach(entry => {
+            const li = document.createElement('li');
+            li.textContent = entry;
+            li.style.padding = '8px 12px';
+            li.style.borderBottom = '1px solid #e0e0e0';
+            historyList.appendChild(li);
+        });
+    }
+    function addHistoryEntry(entry) {
+        const history = JSON.parse(localStorage.getItem('sudokuHistory') || '[]');
+        history.push(entry);
+        localStorage.setItem('sudokuHistory', JSON.stringify(history));
+        renderHistory();
+    }
+    window.addHistoryEntry = addHistoryEntry;
+    window.renderHistory = renderHistory;
+    renderHistory();
+}
+
+window.addEventListener('DOMContentLoaded', setupUniversalSidebar);
+
+// Example: Add to history when new game or check solution is clicked
+window.addEventListener('load', () => {
+    const newGameBtn = document.getElementById('new-game');
+    const checkBtn = document.getElementById('check');
+    if (newGameBtn) {
+        newGameBtn.addEventListener('click', () => {
+            addHistoryEntry('Started a new game at ' + new Date().toLocaleString());
+        });
+    }
+    if (checkBtn) {
+        checkBtn.addEventListener('click', () => {
+            addHistoryEntry('Checked solution at ' + new Date().toLocaleString());
+        });
+    }
+});
