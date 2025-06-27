@@ -294,3 +294,146 @@ window.addEventListener('load', () => {
         });
     }
 });
+
+// --- AUTH & PROFILE LOGIC ---
+async function loginUser(email, password) {
+    const res = await fetch('/api/user/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+    });
+    const data = await res.json();
+    if (res.ok) {
+        localStorage.setItem('token', data.access_token);
+        showUserUI();
+        fetchProfile();
+        fetchHistory();
+        alert('Login successful!');
+    } else {
+        alert(data.detail || 'Login failed');
+    }
+}
+
+async function fetchProfile() {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    const res = await fetch('/api/user/profile', {
+        headers: { 'Authorization': 'Bearer ' + token }
+    });
+    if (res.ok) {
+        const data = await res.json();
+        renderProfile(data);
+    }
+}
+
+function renderProfile(data) {
+    let profileDiv = document.getElementById('profile-info');
+    if (!profileDiv) {
+        profileDiv = document.createElement('div');
+        profileDiv.id = 'profile-info';
+        document.getElementById('auth-forms').appendChild(profileDiv);
+    }
+    profileDiv.innerHTML = `<h4>Profile</h4><div>Email: ${data.email}</div><div>Joined: ${new Date(data.created_at).toLocaleString()}</div><button id='logout-btn'>Logout</button>`;
+    document.getElementById('login-form').style.display = 'none';
+    document.getElementById('signup-link').style.display = 'none';
+    document.getElementById('logout-btn').onclick = logoutUser;
+}
+
+async function updateProfile(email, password) {
+    const token = localStorage.getItem('token');
+    const body = {};
+    if (email) body.email = email;
+    if (password) body.password = password;
+    const res = await fetch('/api/user/profile', {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + token
+        },
+        body: JSON.stringify(body)
+    });
+    if (res.ok) {
+        alert('Profile updated!');
+        fetchProfile();
+    } else {
+        const data = await res.json();
+        alert(data.detail || 'Update failed');
+    }
+}
+
+function logoutUser() {
+    localStorage.removeItem('token');
+    document.getElementById('profile-info').remove();
+    document.getElementById('login-form').style.display = '';
+    document.getElementById('signup-link').style.display = '';
+    renderHistory([]);
+}
+
+function showUserUI() {
+    document.getElementById('login-form').style.display = 'none';
+    document.getElementById('signup-link').style.display = 'none';
+}
+
+// --- HISTORY LOGIC ---
+async function fetchHistory() {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    const res = await fetch('/api/user/history', {
+        headers: { 'Authorization': 'Bearer ' + token }
+    });
+    if (res.ok) {
+        const data = await res.json();
+        renderHistory(data.history);
+    }
+}
+
+function renderHistory(history) {
+    const historyList = document.getElementById('history-list');
+    historyList.innerHTML = '';
+    if (!history || history.length === 0) {
+        const li = document.createElement('li');
+        li.textContent = 'No history yet.';
+        li.style.color = '#888';
+        li.style.padding = '10px';
+        historyList.appendChild(li);
+        return;
+    }
+    history.slice().reverse().forEach(entry => {
+        const li = document.createElement('li');
+        li.textContent = `Puzzle: ${entry.puzzle}, Solved: ${entry.solution ? 'Yes' : 'No'}, Time: ${new Date(entry.timestamp).toLocaleString()}`;
+        li.style.padding = '8px 12px';
+        li.style.borderBottom = '1px solid #e0e0e0';
+        historyList.appendChild(li);
+    });
+}
+
+async function saveHistory(puzzle, solution) {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    await fetch('/api/user/history', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + token
+        },
+        body: JSON.stringify({ puzzle, solution })
+    });
+    fetchHistory();
+}
+
+// --- LOGIN FORM HANDLER ---
+document.getElementById('login-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const email = document.getElementById('login-username').value;
+    const password = document.getElementById('login-password').value;
+    loginUser(email, password);
+});
+
+// --- ON LOAD: CHECK IF LOGGED IN ---
+window.addEventListener('DOMContentLoaded', () => {
+    if (localStorage.getItem('token')) {
+        showUserUI();
+        fetchProfile();
+        fetchHistory();
+    }
+});
