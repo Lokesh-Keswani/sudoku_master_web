@@ -30,9 +30,14 @@ app.add_middleware(
 app.include_router(sudoku.router, prefix="/api/sudoku", tags=["Sudoku"])
 app.include_router(user.router, prefix="/api/user", tags=["User"])
 
-# Serve static files from the frontend directory
-frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "frontend"))
-app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="static")
+@app.get("/api/status")
+def status():
+    from .core import db as mongo_db
+    db_status = mongo_db.db.client is not None
+    return {
+        "server": "ok",
+        "mongodb_connected": db_status
+    }
 
 @app.on_event("startup")
 async def startup_db_client():
@@ -41,3 +46,7 @@ async def startup_db_client():
 @app.on_event("shutdown")
 async def shutdown_db_client():
     await mongo_db.close_mongo_connection()
+
+# Serve static files from the frontend directory
+frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "frontend"))
+app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="static")
