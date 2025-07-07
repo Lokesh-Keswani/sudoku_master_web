@@ -39,15 +39,15 @@ const trainingModules = [
     description: 'Improve your scanning speed and number placement efficiency',
     trainingTarget: 'Speed & Accuracy',
     howItWorks: 'Rapid-fire puzzles with time pressure to enhance scanning and decision-making speed',
-    route: '/training/speed',
+    route: '/training/speed-scanning',
     icon: <Zap className="w-8 h-8" />
   },
   {
     title: 'Mental Mapping',
-    description: 'Develop spatial awareness and mental grid visualization',
-    trainingTarget: 'Spatial Intelligence',
-    howItWorks: 'Puzzles that require keeping track of multiple possibilities across the grid',
-    route: '/training/mapping',
+    description: 'Train your spatial memory by memorizing and recalling Sudoku moves',
+    trainingTarget: 'Spatial Memory & Visualization',
+    howItWorks: 'Memorize highlighted moves for 10 seconds, then recall their exact positions and numbers',
+    route: '/training/mental-mapping',
     icon: <Map className="w-8 h-8" />
   },
   {

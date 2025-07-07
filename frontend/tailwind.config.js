@@ -5,6 +5,7 @@ module.exports = {
     './src/components/**/*.{js,ts,jsx,tsx,mdx}',
     './src/app/**/*.{js,ts,jsx,tsx,mdx}',
   ],
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {
@@ -31,6 +32,8 @@ module.exports = {
         'slide-up': 'slideUp 0.5s ease-out',
         'scale-in': 'scaleIn 0.3s ease-out',
         'bounce-gentle': 'bounceGentle 2s infinite',
+        'pulse-gentle': 'pulseGentle 2s ease-in-out infinite',
+        'shake': 'shake 0.6s ease-in-out',
       },
       keyframes: {
         fadeIn: {
@@ -48,6 +51,15 @@ module.exports = {
         bounceGentle: {
           '0%, 100%': { transform: 'translateY(0)' },
           '50%': { transform: 'translateY(-5px)' },
+        },
+        pulseGentle: {
+          '0%, 100%': { opacity: '1' },
+          '50%': { opacity: '0.8' },
+        },
+        shake: {
+          '0%, 100%': { transform: 'translateX(0)' },
+          '25%': { transform: 'translateX(-5px)' },
+          '75%': { transform: 'translateX(5px)' },
         },
       },
       backdropBlur: {
