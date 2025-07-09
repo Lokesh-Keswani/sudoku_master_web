@@ -55,7 +55,7 @@ const trainingModules = [
     description: 'Get personalized hints and strategy recommendations',
     trainingTarget: 'Strategic Thinking',
     howItWorks: 'AI analyzes your solving patterns and provides targeted suggestions for improvement',
-    route: '/training/ai-coach',
+    route: '/training/coach',
     icon: <Bot className="w-8 h-8" />
   },
   {
