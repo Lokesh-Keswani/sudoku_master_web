@@ -63,7 +63,7 @@ const trainingModules = [
     description: 'Test your skills against increasingly difficult puzzles',
     trainingTarget: 'Endurance & Problem Solving',
     howItWorks: 'Progressive difficulty levels with performance tracking and achievements',
-    route: '/training/challenge',
+    route: '/training/challenge-mode',
     icon: <Trophy className="w-8 h-8" />
   }
 ];

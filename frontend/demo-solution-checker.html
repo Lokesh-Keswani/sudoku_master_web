@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solution Checker Demo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .demo-container {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: #f9f9f9;
+        }
+        .grid-display {
+            display: grid;
+            grid-template-columns: repeat(9, 40px);
+            gap: 1px;
+            background-color: #333;
+            padding: 2px;
+            margin: 10px 0;
+            width: fit-content;
+        }
+        .cell {
+            width: 40px;
+            height: 40px;
+            background-color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 16px;
+        }
+        .cell.empty {
+            background-color: #f0f0f0;
+            color: #999;
+        }
+        .cell.fixed {
+            background-color: #e6f3ff;
+        }
+        .cell.error {
+            background-color: #ffcccc;
+        }
+        .cell.highlight {
+            background-color: #ffffcc;
+        }
+        .button {
+            padding: 10px 20px;
+            margin: 5px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .button.primary {
+            background-color: #007bff;
+            color: white;
+        }
+        .button.success {
+            background-color: #28a745;
+            color: white;
+        }
+        .button.warning {
+            background-color: #ffc107;
+            color: black;
+        }
+        .button.danger {
+            background-color: #dc3545;
+            color: white;
+        }
+        .result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .result.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .result.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .result.info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        .solution-steps {
+            margin: 10px 0;
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            background-color: white;
+        }
+        .step {
+            padding: 5px;
+            margin: 2px 0;
+            border-left: 3px solid #007bff;
+            background-color: #f8f9fa;
+        }
+    </style>
+</head>
+<body>
+    <h1>Enhanced Solution Checker Demo</h1>
+    <p>This demo shows how the enhanced solution checker can complete incomplete puzzles and solve them step by step.</p>
+
+    <div class="demo-container">
+        <h2>Scenario 1: Incomplete Valid Puzzle</h2>
+        <p>A puzzle that is partially filled but can be completed.</p>
+        <div id="grid1" class="grid-display"></div>
+        <button class="button primary" onclick="checkSolution(1)">Check Solution</button>
+        <button class="button success" onclick="completePuzzle(1)">Complete Puzzle</button>
+        <div id="result1"></div>
+    </div>
+
+    <div class="demo-container">
+        <h2>Scenario 2: Complete Valid Solution</h2>
+        <p>A puzzle that is completely filled and correctly solved.</p>
+        <div id="grid2" class="grid-display"></div>
+        <button class="button primary" onclick="checkSolution(2)">Check Solution</button>
+        <div id="result2"></div>
+    </div>
+
+    <div class="demo-container">
+        <h2>Scenario 3: Invalid Puzzle with Conflicts</h2>
+        <p>A puzzle with duplicate numbers that cannot be solved.</p>
+        <div id="grid3" class="grid-display"></div>
+        <button class="button primary" onclick="checkSolution(3)">Check Solution</button>
+        <div id="result3"></div>
+    </div>
+
+    <script src="js/sudoku.js"></script>
+    <script>
+        let games = {};
+
+        // Initialize demo puzzles
+        function initializePuzzles() {
+            // Scenario 1: Incomplete valid puzzle
+            const puzzle1 = [
+                [5,3,4,6,7,8,9,1,0],
+                [6,7,2,1,9,5,3,4,8],
+                [1,9,8,3,4,2,5,6,7],
+                [8,5,9,7,6,1,4,2,3],
+                [4,2,6,8,5,3,7,9,1],
+                [7,1,3,9,2,4,8,5,6],
+                [9,6,1,5,3,7,2,8,4],
+                [2,8,7,4,1,9,6,3,5],
+                [3,4,5,2,8,6,1,7,0]
+            ];
+
+            // Scenario 2: Complete valid solution
+            const puzzle2 = [
+                [5,3,4,6,7,8,9,1,2],
+                [6,7,2,1,9,5,3,4,8],
+                [1,9,8,3,4,2,5,6,7],
+                [8,5,9,7,6,1,4,2,3],
+                [4,2,6,8,5,3,7,9,1],
+                [7,1,3,9,2,4,8,5,6],
+                [9,6,1,5,3,7,2,8,4],
+                [2,8,7,4,1,9,6,3,5],
+                [3,4,5,2,8,6,1,7,9]
+            ];
+
+            // Scenario 3: Invalid puzzle with conflicts
+            const puzzle3 = [
+                [5,5,0,0,0,0,0,0,0],
+                [0,0,0,0,0,0,0,0,0],
+                [0,0,0,0,0,0,0,0,0],
+                [0,0,0,0,0,0,0,0,0],
+                [0,0,0,0,0,0,0,0,0],
+                [0,0,0,0,0,0,0,0,0],
+                [0,0,0,0,0,0,0,0,0],
+                [0,0,0,0,0,0,0,0,0],
+                [0,0,0,0,0,0,0,0,0]
+            ];
+
+            games[1] = createGameFromPuzzle(puzzle1);
+            games[2] = createGameFromPuzzle(puzzle2);
+            games[3] = createGameFromPuzzle(puzzle3);
+
+            renderGrid(1, puzzle1);
+            renderGrid(2, puzzle2);
+            renderGrid(3, puzzle3);
+        }
+
+        function createGameFromPuzzle(puzzle) {
+            const game = new SudokuGame();
+            game.grid = puzzle.map(row => 
+                row.map(value => ({
+                    value: value,
+                    isFixed: value !== 0,
+                    notes: new Set()
+                }))
+            );
+            return game;
+        }
+
+        function renderGrid(scenario, puzzle) {
+            const gridElement = document.getElementById(`grid${scenario}`);
+            gridElement.innerHTML = '';
+
+            for (let row = 0; row < 9; row++) {
+                for (let col = 0; col < 9; col++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    
+                    const value = puzzle[row][col];
+                    if (value === 0) {
+                        cell.textContent = '';
+                        cell.classList.add('empty');
+                    } else {
+                        cell.textContent = value;
+                        cell.classList.add('fixed');
+                    }
+                    
+                    gridElement.appendChild(cell);
+                }
+            }
+        }
+
+        async function checkSolution(scenario) {
+            const resultElement = document.getElementById(`result${scenario}`);
+            resultElement.innerHTML = '<div class="result info">Checking solution...</div>';
+
+            try {
+                const result = await games[scenario].checkSolution();
+                
+                let resultClass = 'info';
+                let message = '';
+
+                if (result.solved) {
+                    resultClass = 'success';
+                    message = `✅ ${result.message || 'Puzzle solved correctly!'}`;
+                } else if (result.valid) {
+                    resultClass = 'info';
+                    message = `ℹ️ ${result.message || 'Puzzle is valid but incomplete.'}`;
+                    
+                    if (result.solutionPath && result.solutionPath.length > 0) {
+                        message += ` Found ${result.solutionPath.length} steps to complete.`;
+                        displaySolutionSteps(scenario, result.solutionPath);
+                    }
+                } else {
+                    resultClass = 'error';
+                    message = `❌ ${result.message || result.error || 'Puzzle has issues.'}`;
+                    
+                    if (result.conflicts && result.conflicts.length > 0) {
+                        message += ` Found ${result.conflicts.length} conflicts.`;
+                        highlightConflicts(scenario, result.conflicts);
+                    }
+                }
+
+                resultElement.innerHTML = `<div class="result ${resultClass}">${message}</div>`;
+                
+            } catch (error) {
+                resultElement.innerHTML = `<div class="result error">❌ Error: ${error.message}</div>`;
+            }
+        }
+
+        async function completePuzzle(scenario) {
+            const resultElement = document.getElementById(`result${scenario}`);
+            resultElement.innerHTML = '<div class="result info">Completing puzzle...</div>';
+
+            try {
+                const result = await games[scenario].completeIncompletePuzzle();
+                
+                if (result.completed) {
+                    resultElement.innerHTML = `<div class="result success">✅ ${result.message}</div>`;
+                    
+                    if (result.solutionPath && result.solutionPath.length > 0) {
+                        displaySolutionSteps(scenario, result.solutionPath);
+                        
+                        // Update the grid display
+                        const currentGrid = games[scenario].grid.map(row => row.map(cell => cell.value));
+                        renderGrid(scenario, currentGrid);
+                    }
+                } else {
+                    resultElement.innerHTML = `<div class="result error">❌ ${result.message}</div>`;
+                }
+                
+            } catch (error) {
+                resultElement.innerHTML = `<div class="result error">❌ Error: ${error.message}</div>`;
+            }
+        }
+
+        function displaySolutionSteps(scenario, steps) {
+            const resultElement = document.getElementById(`result${scenario}`);
+            const stepsDiv = document.createElement('div');
+            stepsDiv.className = 'solution-steps';
+            stepsDiv.innerHTML = '<h4>Solution Steps:</h4>';
+            
+            steps.forEach((step, index) => {
+                const stepDiv = document.createElement('div');
+                stepDiv.className = 'step';
+                stepDiv.innerHTML = `
+                    <strong>Step ${index + 1}:</strong> 
+                    Place ${step.value} at row ${step.row + 1}, column ${step.col + 1} 
+                    (${step.technique || 'Logical deduction'})
+                `;
+                stepsDiv.appendChild(stepDiv);
+            });
+            
+            resultElement.appendChild(stepsDiv);
+        }
+
+        function highlightConflicts(scenario, conflicts) {
+            const gridElement = document.getElementById(`grid${scenario}`);
+            const cells = gridElement.querySelectorAll('.cell');
+            
+            conflicts.forEach(conflict => {
+                if (conflict.row !== undefined && conflict.col !== undefined) {
+                    const cellIndex = conflict.row * 9 + conflict.col;
+                    if (cells[cellIndex]) {
+                        cells[cellIndex].classList.add('error');
+                        setTimeout(() => {
+                            cells[cellIndex].classList.remove('error');
+                        }, 3000);
+                    }
+                }
+            });
+        }
+
+        // Initialize when page loads
+        window.addEventListener('load', initializePuzzles);
+    </script>
+</body>
+</html> 

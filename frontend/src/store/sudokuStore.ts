@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { getRandomEmptyCell, validateBoard, notesKey } from '../utils/sudokuUtils';
 
 // Types
 export type Cell = {
@@ -14,13 +13,10 @@ export type GameState = {
   // Game state
   grid: SudokuGrid;
   solution: number[][] | null;
-  solutionBoard: number[][] | null;
   difficulty: string;
   selectedCell: { row: number; col: number } | null;
   isNotesMode: boolean;
-  notes: Record<string, number[]>;
   hintsRemaining: number;
-  wrongCells: Set<string>;
   checkCount: number;
   
   // Timer
@@ -45,7 +41,7 @@ export type GameState = {
   makeMove: (value: number) => Promise<boolean>;
   toggleNote: (row: number, col: number, value: number) => boolean;
   getHint: () => Promise<any>;
-  checkSolution: () => void;
+  checkSolution: () => Promise<any>;
   undo: () => boolean;
   redo: () => boolean;
   erase: () => boolean;
@@ -54,11 +50,8 @@ export type GameState = {
   pauseTimer: () => void;
   resumeTimer: () => void;
   getFormattedTime: () => string;
+  setDifficulty: (difficulty: string) => void;
   resetGame: () => void;
-  useHint: () => void;
-  toggleNotesMode: () => void;
-  updateNotes: (row: number, col: number, value: number) => void;
-  clearNotes: (row: number, col: number) => void;
 };
 
 const API_URL = 'http://localhost:8000';
@@ -73,13 +66,10 @@ export const useSudokuStore = create<GameState>((set, get) => ({
     }))
   ),
   solution: null,
-  solutionBoard: null,
   difficulty: 'medium',
   selectedCell: null,
   isNotesMode: false,
-  notes: {},
   hintsRemaining: 3,
-  wrongCells: new Set(),
   checkCount: 0,
   
   timer: {
@@ -227,7 +217,7 @@ export const useSudokuStore = create<GameState>((set, get) => ({
   },
 
   getHint: async () => {
-    const { grid, solution, hintsRemaining, difficulty } = get();
+    const { grid, solution, hintsRemaining } = get();
     if (hintsRemaining <= 0 || !solution) return null;
 
     try {
@@ -236,8 +226,7 @@ export const useSudokuStore = create<GameState>((set, get) => ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           grid: grid.map(row => row.map(cell => cell.value)),
-          solution,
-          difficulty
+          solution
         })
       });
 
@@ -255,12 +244,30 @@ export const useSudokuStore = create<GameState>((set, get) => ({
     return null;
   },
 
-  checkSolution: () => {
+  checkSolution: async () => {
     const { grid, solution } = get();
-    if (!solution) return;
-    const wrong = validateBoard(grid, solution);
-    set({ wrongCells: wrong });
-    setTimeout(() => set({ wrongCells: new Set() }), 2000);
+    
+    try {
+      const response = await fetch(`${API_URL}/api/sudoku/check-solution`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          grid: grid.map(row => row.map(cell => cell.value)),
+          solution
+        })
+      });
+
+      if (!response.ok) return { solved: false, error: 'Check failed' };
+
+      const data = await response.json();
+      if (data.solved) {
+        get().stopTimer();
+      }
+      return data;
+    } catch (error) {
+      console.error('Error checking solution:', error);
+      return { solved: false, error: 'Check failed' };
+    }
   },
 
   undo: () => {
@@ -417,6 +424,10 @@ export const useSudokuStore = create<GameState>((set, get) => ({
     return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
   },
 
+  setDifficulty: (difficulty: string) => {
+    set({ difficulty });
+  },
+
   resetGame: () => {
     set({
       grid: Array(9).fill(null).map(() => 
@@ -442,52 +453,5 @@ export const useSudokuStore = create<GameState>((set, get) => ({
         isGameComplete: false
       }
     });
-  },
-
-  useHint: () => {
-    const { grid, solution, hintsRemaining } = get();
-    if (!solution || hintsRemaining <= 0) return;
-    const cell = getRandomEmptyCell(grid);
-    if (!cell) return;
-    const { row, col } = cell;
-    const value = solution[row][col];
-    // Save state for undo if needed
-    const newGrid = grid.map((r, i) =>
-      r.map((c, j) =>
-        i === row && j === col ? { ...c, value } : c
-      )
-    );
-    set({
-      grid: newGrid,
-      hintsRemaining: hintsRemaining - 1,
-    });
-    // Optionally: trigger animation state for this cell
-  },
-
-  toggleNotesMode: () => {
-    set((state) => ({ isNotesMode: !state.isNotesMode }));
-  },
-
-  updateNotes: (row, col, value) => {
-    const { notes } = get();
-    const key = notesKey(row, col);
-    const current = notes[key] || [];
-    let updated: number[];
-    if (current.includes(value)) {
-      updated = current.filter((v) => v !== value);
-    } else {
-      updated = [...current, value].sort();
-    }
-    set({ notes: { ...notes, [key]: updated } });
-  },
-
-  clearNotes: (row, col) => {
-    const { notes } = get();
-    const key = notesKey(row, col);
-    if (notes[key]) {
-      const newNotes = { ...notes };
-      delete newNotes[key];
-      set({ notes: newNotes });
-    }
-  },
+  }
 })); 

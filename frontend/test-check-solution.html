@@ -54,6 +54,13 @@
         <div id="result3"></div>
     </div>
 
+    <div class="test-container">
+        <h3>Test 4: Complete Incomplete Puzzle</h3>
+        <p>This test verifies that an incomplete puzzle can be completed automatically.</p>
+        <button id="test4">Run Test 4</button>
+        <div id="result4"></div>
+    </div>
+
     <script src="js/sudoku.js"></script>
     <script>
         // Test 1: Check Valid Solution
@@ -161,6 +168,42 @@
             } catch (error) {
                 resultDiv.innerHTML = `<span class="error">❌ Test failed with error: ${error.message}</span>`;
                 console.error('Test 3 error:', error);
+            }
+        });
+
+        // Test 4: Complete Incomplete Puzzle
+        document.getElementById('test4').addEventListener('click', async () => {
+            const resultDiv = document.getElementById('result4');
+            resultDiv.innerHTML = 'Running test...';
+            
+            try {
+                const game = new SudokuGame();
+                
+                // Create an incomplete puzzle (first row missing last number)
+                game.grid = [
+                    [{value: 5, isFixed: true, notes: new Set()}, {value: 3, isFixed: true, notes: new Set()}, {value: 4, isFixed: true, notes: new Set()}, {value: 6, isFixed: true, notes: new Set()}, {value: 7, isFixed: true, notes: new Set()}, {value: 8, isFixed: true, notes: new Set()}, {value: 9, isFixed: true, notes: new Set()}, {value: 1, isFixed: true, notes: new Set()}, {value: 0, isFixed: false, notes: new Set()}],
+                    [{value: 6, isFixed: true, notes: new Set()}, {value: 7, isFixed: true, notes: new Set()}, {value: 2, isFixed: true, notes: new Set()}, {value: 1, isFixed: true, notes: new Set()}, {value: 9, isFixed: true, notes: new Set()}, {value: 5, isFixed: true, notes: new Set()}, {value: 3, isFixed: true, notes: new Set()}, {value: 4, isFixed: true, notes: new Set()}, {value: 8, isFixed: true, notes: new Set()}],
+                    [{value: 1, isFixed: true, notes: new Set()}, {value: 9, isFixed: true, notes: new Set()}, {value: 8, isFixed: true, notes: new Set()}, {value: 3, isFixed: true, notes: new Set()}, {value: 4, isFixed: true, notes: new Set()}, {value: 2, isFixed: true, notes: new Set()}, {value: 5, isFixed: true, notes: new Set()}, {value: 6, isFixed: true, notes: new Set()}, {value: 7, isFixed: true, notes: new Set()}],
+                    [{value: 8, isFixed: true, notes: new Set()}, {value: 5, isFixed: true, notes: new Set()}, {value: 9, isFixed: true, notes: new Set()}, {value: 7, isFixed: true, notes: new Set()}, {value: 6, isFixed: true, notes: new Set()}, {value: 1, isFixed: true, notes: new Set()}, {value: 4, isFixed: true, notes: new Set()}, {value: 2, isFixed: true, notes: new Set()}, {value: 3, isFixed: true, notes: new Set()}],
+                    [{value: 4, isFixed: true, notes: new Set()}, {value: 2, isFixed: true, notes: new Set()}, {value: 6, isFixed: true, notes: new Set()}, {value: 8, isFixed: true, notes: new Set()}, {value: 5, isFixed: true, notes: new Set()}, {value: 3, isFixed: true, notes: new Set()}, {value: 7, isFixed: true, notes: new Set()}, {value: 9, isFixed: true, notes: new Set()}, {value: 1, isFixed: true, notes: new Set()}],
+                    [{value: 7, isFixed: true, notes: new Set()}, {value: 1, isFixed: true, notes: new Set()}, {value: 3, isFixed: true, notes: new Set()}, {value: 9, isFixed: true, notes: new Set()}, {value: 2, isFixed: true, notes: new Set()}, {value: 4, isFixed: true, notes: new Set()}, {value: 8, isFixed: true, notes: new Set()}, {value: 5, isFixed: true, notes: new Set()}, {value: 6, isFixed: true, notes: new Set()}],
+                    [{value: 9, isFixed: true, notes: new Set()}, {value: 6, isFixed: true, notes: new Set()}, {value: 1, isFixed: true, notes: new Set()}, {value: 5, isFixed: true, notes: new Set()}, {value: 3, isFixed: true, notes: new Set()}, {value: 7, isFixed: true, notes: new Set()}, {value: 2, isFixed: true, notes: new Set()}, {value: 8, isFixed: true, notes: new Set()}, {value: 4, isFixed: true, notes: new Set()}],
+                    [{value: 2, isFixed: true, notes: new Set()}, {value: 8, isFixed: true, notes: new Set()}, {value: 7, isFixed: true, notes: new Set()}, {value: 4, isFixed: true, notes: new Set()}, {value: 1, isFixed: true, notes: new Set()}, {value: 9, isFixed: true, notes: new Set()}, {value: 6, isFixed: true, notes: new Set()}, {value: 3, isFixed: true, notes: new Set()}, {value: 5, isFixed: true, notes: new Set()}],
+                    [{value: 3, isFixed: true, notes: new Set()}, {value: 4, isFixed: true, notes: new Set()}, {value: 5, isFixed: true, notes: new Set()}, {value: 2, isFixed: true, notes: new Set()}, {value: 8, isFixed: true, notes: new Set()}, {value: 6, isFixed: true, notes: new Set()}, {value: 1, isFixed: true, notes: new Set()}, {value: 7, isFixed: true, notes: new Set()}, {value: 0, isFixed: false, notes: new Set()}]
+                ];
+                
+                const result = await game.completeIncompletePuzzle();
+                
+                if (result.completed && result.solutionPath && result.solutionPath.length > 0) {
+                    resultDiv.innerHTML = `<span class="success">✅ Test passed! Puzzle completed successfully with ${result.solutionPath.length} steps.</span>`;
+                    console.log('Test 4 passed:', result);
+                } else {
+                    resultDiv.innerHTML = `<span class="error">❌ Test failed! Expected completed puzzle with solution path, but got: ${JSON.stringify(result)}</span>`;
+                    console.error('Test 4 failed:', result);
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<span class="error">❌ Test failed with error: ${error.message}</span>`;
+                console.error('Test 4 error:', error);
             }
         });
     </script>

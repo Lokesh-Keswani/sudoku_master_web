@@ -1152,6 +1152,44 @@ class SudokuGame {
             }
         }
 
+        // First check if the current state is valid
+        const isValid = this.isValid();
+        console.log('Board validity check:', isValid);
+        
+        if (!isValid) {
+            // Find conflicts to give more specific feedback
+            const conflicts = this.findConflicts();
+            console.log('Found conflicts:', conflicts);
+            
+            if (conflicts.length > 0) {
+                return { 
+                    valid: false, 
+                    message: `Invalid board: ${conflicts[0].reason}`,
+                    conflicts: conflicts,
+                    showSolution: true
+                };
+            }
+            return { 
+                valid: false, 
+                message: 'The current board has conflicts!',
+                showSolution: true
+            };
+        }
+
+        // Check if the puzzle is already solved
+        const isComplete = this.isComplete();
+        console.log('Board complete check:', isComplete);
+        
+        if (isComplete) {
+            this.stopTimer();
+            return { 
+                solved: true, 
+                valid: true, 
+                message: 'Puzzle solved correctly!',
+                showSolution: false
+            };
+        }
+
         // Now we can check against the solution (if available)
         if (this.solution) {
             console.log('Checking against stored solution'); // Debug log
@@ -1173,10 +1211,14 @@ class SudokuGame {
             
             if (isSolved && !hasEmptyCells) {
                 this.stopTimer();
-                return { solved: true };
+                return { 
+                    solved: true, 
+                    valid: true,
+                    message: 'Puzzle solved correctly!'
+                };
             }
             
-            // Generate remaining solution steps
+            // Generate remaining solution steps to complete the puzzle
             const remainingSteps = this.generateRemainingSteps();
             if (remainingSteps.length > 0) {
                 // Add timestamp to each step
@@ -1189,13 +1231,35 @@ class SudokuGame {
             
             return { 
                 solved: false, 
+                valid: true,
                 showSolution: true,
-                solutionPath: remainingSteps
+                solutionPath: remainingSteps,
+                message: `Puzzle incomplete. ${remainingSteps.length} steps remaining to complete.`
             };
         }
 
         // If we reach here, we're dealing with a puzzle without a solution
-        // (either user-created but not complete enough, or invalid)
+        // Try to generate a solution and complete the puzzle
+        console.log('No stored solution, attempting to solve puzzle...');
+        const solvedGrid = this.solvePuzzle([...currentGrid.map(row => [...row])]);
+        
+        if (solvedGrid) {
+            this.solution = solvedGrid;
+            console.log('Generated solution successfully');
+            
+            // Generate complete solution path
+            const completeSolutionPath = this.generateCompleteSolutionPath(currentGrid, solvedGrid);
+            
+            return {
+                solved: false,
+                valid: true,
+                showSolution: true,
+                solutionPath: completeSolutionPath,
+                message: `Puzzle solvable. ${completeSolutionPath.length} steps to complete.`
+            };
+        }
+
+        // If we can't solve it, check if it's complete but invalid
         let isComplete = true;
         let isValid = true;
 
@@ -1213,8 +1277,9 @@ class SudokuGame {
         if (!isComplete) {
             return { 
                 solved: false, 
+                valid: true,
                 showSolution: false,
-                error: 'Puzzle is not complete'
+                error: 'Puzzle is not complete and cannot be solved'
             };
         }
         
@@ -1279,13 +1344,185 @@ class SudokuGame {
             if (!this.solution) {
                 this.solution = currentGrid;
             }
-            return { solved: true };
+            return { 
+                solved: true, 
+                valid: true,
+                message: 'Puzzle solved correctly!'
+            };
         }
 
         return { 
             solved: false, 
+            valid: false,
             showSolution: false,
             error: 'Puzzle solution is invalid'
+        };
+    }
+
+    // New method to generate complete solution path from current state to solution
+    generateCompleteSolutionPath(currentGrid, solutionGrid) {
+        console.log('Generating complete solution path...');
+        
+        const steps = [];
+        const workingGrid = [...currentGrid.map(row => [...row])];
+        const emptyCells = [];
+
+        // First, identify all empty cells that need to be filled
+        for (let row = 0; row < 9; row++) {
+            for (let col = 0; col < 9; col++) {
+                if (currentGrid[row][col] === 0) {
+                    emptyCells.push({ row, col });
+                }
+            }
+        }
+
+        console.log(`Found ${emptyCells.length} empty cells to fill`);
+
+        while (emptyCells.length > 0) {
+            let bestMove = null;
+            let bestMoveScore = Infinity;
+
+            // Try each empty cell
+            for (let i = 0; i < emptyCells.length; i++) {
+                const { row, col } = emptyCells[i];
+                const targetValue = solutionGrid[row][col];
+                const possibilities = this.getCellPossibilities(workingGrid, row, col);
+
+                // Skip if we can't place the target value
+                if (!possibilities.has(targetValue)) {
+                    continue;
+                }
+
+                let moveScore = possibilities.size; // Base score on number of possibilities
+                let technique = '';
+                let reason = '';
+
+                // Check for naked single
+                if (possibilities.size === 1) {
+                    moveScore = 1;
+                    technique = 'Naked Single';
+                    reason = `Only one possible value (${targetValue}) for this cell`;
+                }
+                // Check for hidden single in row
+                else if (this.isHiddenSingle(workingGrid, row, col, targetValue, 'row')) {
+                    moveScore = 2;
+                    technique = 'Hidden Single (Row)';
+                    reason = `${targetValue} can only go in this cell in row ${row + 1}`;
+                }
+                // Check for hidden single in column
+                else if (this.isHiddenSingle(workingGrid, row, col, targetValue, 'column')) {
+                    moveScore = 2;
+                    technique = 'Hidden Single (Column)';
+                    reason = `${targetValue} can only go in this cell in column ${col + 1}`;
+                }
+                // Check for hidden single in box
+                else if (this.isHiddenSingle(workingGrid, row, col, targetValue, 'box')) {
+                    moveScore = 2;
+                    technique = 'Hidden Single (Box)';
+                    reason = `${targetValue} can only go in this cell in this 3x3 box`;
+                }
+                // Fallback to logical deduction
+                else {
+                    moveScore = 3 + possibilities.size;
+                    technique = 'Logical Deduction';
+                    reason = `${targetValue} is the correct value based on the solution`;
+                }
+
+                if (moveScore < bestMoveScore) {
+                    bestMove = {
+                        row,
+                        col,
+                        value: targetValue,
+                        technique,
+                        difficulty: moveScore <= 2 ? 'Basic' : 'Intermediate',
+                        reason,
+                        score: moveScore
+                    };
+                    bestMoveScore = moveScore;
+                }
+            }
+
+            if (!bestMove) {
+                console.log('No valid moves found, breaking');
+                break;
+            }
+
+            // Add the move to steps
+            steps.push(bestMove);
+            console.log('Added move:', bestMove);
+
+            // Apply the move to the working grid
+            workingGrid[bestMove.row][bestMove.col] = bestMove.value;
+
+            // Remove the cell from emptyCells
+            const index = emptyCells.findIndex(cell => 
+                cell.row === bestMove.row && cell.col === bestMove.col
+            );
+            if (index !== -1) {
+                emptyCells.splice(index, 1);
+            }
+        }
+
+        console.log(`Generated ${steps.length} complete solution steps`);
+        return steps;
+    }
+
+    // Enhanced method to complete incomplete puzzles
+    async completeIncompletePuzzle() {
+        console.log('Completing incomplete puzzle...');
+        
+        const currentGrid = this.grid.map(row => row.map(cell => cell.value));
+        
+        // Check if puzzle is already complete
+        if (this.isComplete()) {
+            return {
+                completed: true,
+                message: 'Puzzle is already complete!',
+                solutionPath: []
+            };
+        }
+
+        // Check if current state is valid
+        if (!this.isValid()) {
+            return {
+                completed: false,
+                message: 'Cannot complete invalid puzzle. Please fix conflicts first.',
+                error: 'Invalid board state'
+            };
+        }
+
+        // Try to generate a solution
+        const solvedGrid = this.solvePuzzle([...currentGrid.map(row => [...row])]);
+        
+        if (!solvedGrid) {
+            return {
+                completed: false,
+                message: 'Puzzle cannot be solved from current state.',
+                error: 'No solution exists'
+            };
+        }
+
+        // Store the solution
+        this.solution = solvedGrid;
+        
+        // Generate complete solution path
+        const solutionPath = this.generateCompleteSolutionPath(currentGrid, solvedGrid);
+        
+        // Apply the solution to the current grid
+        for (let row = 0; row < 9; row++) {
+            for (let col = 0; col < 9; col++) {
+                if (this.grid[row][col].value === 0) {
+                    this.grid[row][col].value = solvedGrid[row][col];
+                }
+            }
+        }
+
+        console.log('Puzzle completed successfully');
+        
+        return {
+            completed: true,
+            message: `Puzzle completed! Applied ${solutionPath.length} moves.`,
+            solutionPath: solutionPath
         };
     }
 
