@@ -54,8 +54,8 @@ def get_current_user_or_guest(credentials: HTTPAuthorizationCredentials = Depend
 async def signup(user: UserCreate):
     if not db.client:
         raise HTTPException(status_code=503, detail="Database not available")
-    users_collection = db.client["sudoku_master"]["users"]
-    existing = await users_collection.find_one({"email": user.email})
+    users_collection = db.db.users
+    existing = users_collection.find_one({"email": user.email})
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
     hashed_password = get_password_hash(user.password)
@@ -64,15 +64,15 @@ async def signup(user: UserCreate):
         "hashed_password": hashed_password,
         "created_at": datetime.utcnow()
     }
-    await users_collection.insert_one(user_doc)
+    users_collection.insert_one(user_doc)
     return {"msg": "User registered successfully"}
 
 @router.post("/login")
 async def login(user: UserLogin):
     if not db.client:
         raise HTTPException(status_code=503, detail="Database not available")
-    users_collection = db.client["sudoku_master"]["users"]
-    user_doc = await users_collection.find_one({"email": user.email})
+    users_collection = db.db.users
+    user_doc = users_collection.find_one({"email": user.email})
     if not user_doc:
         raise HTTPException(status_code=400, detail="Invalid credentials")
     if not verify_password(user.password, user_doc["hashed_password"]):
@@ -98,14 +98,14 @@ async def save_history(history: HistoryCreate, user=Depends(get_current_user_or_
         raise HTTPException(status_code=403, detail="Guest users cannot save history.")
     if not db.client:
         raise HTTPException(status_code=503, detail="Database not available")
-    history_collection = db.client["sudoku_master"]["history"]
+    history_collection = db.db.history
     doc = {
         "user_id": user["user_id"],
         "puzzle": history.puzzle,
         "solution": history.solution,
         "timestamp": history.timestamp or datetime.utcnow()
     }
-    await history_collection.insert_one(doc)
+    history_collection.insert_one(doc)
     return {"msg": "History saved"}
 
 @router.get("/history")
@@ -114,10 +114,10 @@ async def get_history(user=Depends(get_current_user_or_guest)):
         raise HTTPException(status_code=403, detail="Guest users have no history.")
     if not db.client:
         raise HTTPException(status_code=503, detail="Database not available")
-    history_collection = db.client["sudoku_master"]["history"]
+    history_collection = db.db.history
     cursor = history_collection.find({"user_id": user["user_id"]})
     history_list = []
-    async for item in cursor:
+    for item in cursor:
         item["id"] = str(item["_id"])
         del item["_id"]
         history_list.append(item)
@@ -129,8 +129,8 @@ async def get_profile(user=Depends(get_current_user_or_guest)):
         raise HTTPException(status_code=403, detail="Guest users have no profile.")
     if not db.client:
         raise HTTPException(status_code=503, detail="Database not available")
-    users_collection = db.client["sudoku_master"]["users"]
-    user_doc = await users_collection.find_one({"_id": ObjectId(user["user_id"])})
+    users_collection = db.db.users
+    user_doc = users_collection.find_one({"_id": ObjectId(user["user_id"])})
     if not user_doc:
         raise HTTPException(status_code=404, detail="User not found")
     return {
@@ -148,7 +148,7 @@ async def update_profile(
         raise HTTPException(status_code=403, detail="Guest users cannot update profile.")
     if not db.client:
         raise HTTPException(status_code=503, detail="Database not available")
-    users_collection = db.client["sudoku_master"]["users"]
+    users_collection = db.db.users
     update_data = {}
     if email:
         update_data["email"] = email
@@ -156,7 +156,7 @@ async def update_profile(
         update_data["hashed_password"] = get_password_hash(password)
     if not update_data:
         raise HTTPException(status_code=400, detail="No data to update")
-    result = await users_collection.update_one(
+    result = users_collection.update_one(
         {"_id": ObjectId(user["user_id"])},
         {"$set": update_data}
     )

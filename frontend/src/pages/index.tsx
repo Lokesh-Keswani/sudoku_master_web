@@ -11,7 +11,7 @@ const HomePage: React.FC = () => {
   };
 
   const handlePlayClick = () => {
-    router.push('/game');
+    window.location.href = '/game.html';
   };
 
   return (

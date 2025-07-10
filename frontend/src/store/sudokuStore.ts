@@ -52,19 +52,38 @@ export type GameState = {
   getFormattedTime: () => string;
   setDifficulty: (difficulty: string) => void;
   resetGame: () => void;
+  saveState: () => void;
 };
 
 const API_URL = 'http://localhost:8000';
 
+// Helper function to create a cell
+const createCell = (value: number = 0, isFixed: boolean = false): Cell => ({
+  value,
+  isFixed,
+  notes: new Set<number>()
+});
+
+// Helper function to create a grid
+const createGrid = (puzzle?: number[][]): SudokuGrid => {
+  const grid = Array(9).fill(null).map(() => 
+    Array(9).fill(null).map(() => createCell())
+  );
+
+  if (puzzle) {
+    for (let i = 0; i < 9; i++) {
+      for (let j = 0; j < 9; j++) {
+        grid[i][j] = createCell(puzzle[i][j], puzzle[i][j] !== 0);
+      }
+    }
+  }
+
+  return grid;
+};
+
 export const useSudokuStore = create<GameState>((set, get) => ({
   // Initial state
-  grid: Array(9).fill(null).map(() => 
-    Array(9).fill(null).map(() => ({
-      value: 0,
-      isFixed: false,
-      notes: new Set()
-    }))
-  ),
+  grid: createGrid(),
   solution: null,
   difficulty: 'medium',
   selectedCell: null,
@@ -84,10 +103,22 @@ export const useSudokuStore = create<GameState>((set, get) => ({
   isCreating: false,
   isPlaying: false,
 
+  // Save current state for undo/redo
+  saveState: () => {
+    const { grid, undoStack } = get();
+    const newUndoStack = [...undoStack];
+    const gridCopy = grid.map(row => 
+      row.map(cell => createCell(cell.value, cell.isFixed))
+    );
+    newUndoStack.push(gridCopy);
+    set({ undoStack: newUndoStack, redoStack: [] });
+  },
+
   // Actions
   newGame: async (difficulty = 'medium') => {
     try {
-      const response = await fetch(`${API_URL}/api/sudoku/new`, {
+      // Get a new puzzle from the backend
+      const response = await fetch(`${API_URL}/api/new`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -103,15 +134,10 @@ export const useSudokuStore = create<GameState>((set, get) => ({
       }
 
       const data = await response.json();
+      const puzzle = data.puzzle;
 
-      // Initialize grid with cell objects
-      const grid = data.grid.map((row: number[]) => 
-        row.map((value: number) => ({
-          value: value,
-          isFixed: value !== 0,
-          notes: new Set()
-        }))
-      );
+      // Initialize grid with puzzle values
+      const grid = createGrid(puzzle);
 
       // Set hint levels based on difficulty
       const hintLevels = {
@@ -325,11 +351,6 @@ export const useSudokuStore = create<GameState>((set, get) => ({
     return true;
   },
 
-  saveState: () => {
-    const { grid, undoStack } = get();
-    set({ undoStack: [...undoStack, JSON.parse(JSON.stringify(grid))] });
-  },
-
   startTimer: () => {
     const { timer } = get();
     if (timer.isPaused) {
@@ -430,13 +451,7 @@ export const useSudokuStore = create<GameState>((set, get) => ({
 
   resetGame: () => {
     set({
-      grid: Array(9).fill(null).map(() => 
-        Array(9).fill(null).map(() => ({
-          value: 0,
-          isFixed: false,
-          notes: new Set()
-        }))
-      ),
+      grid: createGrid(),
       solution: null,
       selectedCell: null,
       isNotesMode: false,

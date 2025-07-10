@@ -1,16 +1,46 @@
 // Jest setup file
 import '@testing-library/jest-dom';
 
-// Mock environment variables for testing
-process.env.NODE_ENV = 'test';
+// Mock localStorage
+const localStorageMock = {
+  getItem: jest.fn(),
+  setItem: jest.fn(),
+  removeItem: jest.fn(),
+  clear: jest.fn(),
+};
 
-// Mock console methods to reduce noise in tests
-global.console = {
-  ...console,
-  // Uncomment to suppress console.log during tests
-  // log: jest.fn(),
-  // debug: jest.fn(),
-  // info: jest.fn(),
-  warn: jest.fn(),
-  error: jest.fn(),
-}; 
+Object.defineProperty(window, 'localStorage', {
+  value: localStorageMock,
+  writable: true
+});
+
+// Mock speechSynthesis
+const speechSynthesisMock = {
+  speak: jest.fn(),
+  cancel: jest.fn(),
+  pause: jest.fn(),
+  resume: jest.fn(),
+  getVoices: jest.fn().mockReturnValue([]),
+};
+
+Object.defineProperty(window, 'speechSynthesis', {
+  value: speechSynthesisMock,
+  writable: true
+});
+
+// Mock AudioContext
+class AudioContextMock {
+  createOscillator = jest.fn().mockReturnValue({
+    connect: jest.fn(),
+    start: jest.fn(),
+    stop: jest.fn(),
+  });
+  createGain = jest.fn().mockReturnValue({
+    connect: jest.fn(),
+    gain: { value: 0 },
+  });
+  destination = {};
+}
+
+// @ts-ignore
+global.AudioContext = AudioContextMock; 

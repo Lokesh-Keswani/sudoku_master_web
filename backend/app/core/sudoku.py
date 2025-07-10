@@ -427,3 +427,62 @@ class SudokuGenerator:
              max_difficulty = 5 # Needs backtracking or harder techniques
 
         return {"path": path, "max_difficulty": max_difficulty, "solved": is_solved} 
+
+def is_valid(board, num, pos):
+    # Check row
+    for x in range(len(board[0])):
+        if board[pos[0]][x] == num and pos[1] != x:
+            return False
+            
+    # Check column
+    for x in range(len(board)):
+        if board[x][pos[1]] == num and pos[0] != x:
+            return False
+    
+    # Check box
+    box_x = pos[1] // 3
+    box_y = pos[0] // 3
+
+    for i in range(box_y * 3, box_y * 3 + 3):
+        for j in range(box_x * 3, box_x * 3 + 3):
+            if board[i][j] == num and (i,j) != pos:
+                return False
+    
+    return True
+
+def find_empty(board):
+    for i in range(len(board)):
+        for j in range(len(board[0])):
+            if board[i][j] == 0:
+                return (i, j)  # row, col
+    return None
+
+def solve(board):
+    find = find_empty(board)
+    if not find:
+        return True
+    else:
+        row, col = find
+
+    for i in range(1,10):
+        if is_valid(board, i, (row, col)):
+            board[row][col] = i
+
+            if solve(board):
+                return True
+
+            board[row][col] = 0
+
+    return False
+
+def solve_sudoku(puzzle):
+    """Main function to solve a Sudoku puzzle"""
+    if not puzzle or len(puzzle) != 9 or any(len(row) != 9 for row in puzzle):
+        return None
+    
+    # Convert strings to integers if needed
+    board = [[int(cell) if isinstance(cell, str) else cell for cell in row] for row in puzzle]
+    
+    if solve(board):
+        return board
+    return None 
