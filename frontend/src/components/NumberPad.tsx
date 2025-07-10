@@ -24,18 +24,18 @@ const NumberPad: React.FC = () => {
     updateNotes
   } = useSudokuStore();
 
-  const handleNumberClick = (number: number) => {
+  const handleNumberClick = async (number: number) => {
     if (!selectedCell) return;
     if (isNotesMode) {
       updateNotes(selectedCell.row, selectedCell.col, number);
     } else {
-      makeMove(number);
+      await makeMove(number);
     }
   };
 
-  const handleErase = () => {
+  const handleErase = async () => {
     if (selectedCell) {
-      erase();
+      await makeMove(0);
     }
   };
 
@@ -148,19 +148,13 @@ const NumberPad: React.FC = () => {
       {/* Status Indicators */}
       <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
         <div className="text-sm text-gray-600 dark:text-gray-400">
-          <div className="flex justify-between items-center">
+          <div className="flex justify-between mb-1">
             <span>Undo Stack:</span>
             <span className="font-mono">{undoStack.length}</span>
           </div>
-          <div className="flex justify-between items-center">
+          <div className="flex justify-between">
             <span>Redo Stack:</span>
             <span className="font-mono">{redoStack.length}</span>
-          </div>
-          <div className="flex justify-between items-center">
-            <span>Notes Mode:</span>
-            <span className={isNotesMode ? 'text-yellow-600 dark:text-yellow-400' : 'text-gray-400'}>
-              {isNotesMode ? 'ON' : 'OFF'}
-            </span>
           </div>
         </div>
       </div>

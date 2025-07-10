@@ -22,12 +22,16 @@ const SudokuGame: React.FC = () => {
     pauseTimer,
     resumeTimer,
     getFormattedTime,
-    setDifficulty
+    setDifficulty,
+    makeMove,
+    selectCell,
+    toggleNotesMode
   } = useSudokuStore();
 
   const { theme } = useThemeStore();
 
   const [showCongrats, setShowCongrats] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   // Apply theme to document
   useEffect(() => {
@@ -39,8 +43,81 @@ const SudokuGame: React.FC = () => {
     }
   }, [theme]);
 
+  // Global keyboard event listener
+  useEffect(() => {
+    const handleKeyDown = async (e: KeyboardEvent) => {
+      // Don't handle keyboard events if user is typing in an input field
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      const key = e.key;
+
+      // Number keys 1-9
+      if (key >= '1' && key <= '9') {
+        e.preventDefault();
+        if (selectedCell) {
+          await makeMove(parseInt(key));
+        }
+      }
+      // Arrow keys for navigation
+      else if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(key)) {
+        e.preventDefault();
+        if (selectedCell) {
+          const { row, col } = selectedCell;
+          let newRow = row;
+          let newCol = col;
+
+          switch (key) {
+            case 'ArrowUp':
+              newRow = Math.max(0, row - 1);
+              break;
+            case 'ArrowDown':
+              newRow = Math.min(8, row + 1);
+              break;
+            case 'ArrowLeft':
+              newCol = Math.max(0, col - 1);
+              break;
+            case 'ArrowRight':
+              newCol = Math.min(8, col + 1);
+              break;
+          }
+
+          selectCell(newRow, newCol);
+        }
+      }
+      // Backspace/Delete for erasing
+      else if (key === 'Backspace' || key === 'Delete') {
+        e.preventDefault();
+        if (selectedCell) {
+          await makeMove(0);
+        }
+      }
+      // Space bar for notes mode toggle
+      else if (key === ' ') {
+        e.preventDefault();
+        toggleNotesMode();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [selectedCell, makeMove, selectCell, toggleNotesMode]);
+
   const handleNewGame = async () => {
-    await newGame(difficulty);
+    setIsLoading(true);
+    try {
+      const success = await newGame(difficulty);
+      if (!success) {
+        console.error('Failed to start new game');
+      }
+    } catch (error) {
+      console.error('Error starting new game:', error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handlePauseResume = () => {
@@ -52,8 +129,18 @@ const SudokuGame: React.FC = () => {
   };
 
   const handleDifficultyChange = async (newDifficulty: string) => {
-    setDifficulty(newDifficulty);
-    await newGame(newDifficulty);
+    setIsLoading(true);
+    try {
+      setDifficulty(newDifficulty);
+      const success = await newGame(newDifficulty);
+      if (!success) {
+        console.error('Failed to start new game with difficulty:', newDifficulty);
+      }
+    } catch (error) {
+      console.error('Error changing difficulty:', error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Listen for puzzle solved (stopTimer is called in store)
@@ -113,7 +200,8 @@ const SudokuGame: React.FC = () => {
               <select
                 value={difficulty}
                 onChange={(e) => handleDifficultyChange(e.target.value)}
-                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                disabled={isLoading}
+                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <option value="easy">Easy</option>
                 <option value="medium">Medium</option>
@@ -123,14 +211,19 @@ const SudokuGame: React.FC = () => {
               </select>
               
               <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
+                whileHover={{ scale: isLoading ? 1 : 1.05 }}
+                whileTap={{ scale: isLoading ? 1 : 0.95 }}
                 onClick={handleNewGame}
-                className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors flex items-center gap-2"
+                disabled={isLoading}
+                className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Start a new game"
               >
-                <Play className="w-4 h-4" />
-                New Game
+                {isLoading ? (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                ) : (
+                  <Play className="w-4 h-4" />
+                )}
+                {isLoading ? 'Loading...' : 'New Game'}
               </motion.button>
             </div>
           </div>
@@ -222,6 +315,7 @@ const SudokuGame: React.FC = () => {
                 <li>• Undo/Redo moves with history tracking</li>
                 <li>• Get hints (limited per game)</li>
                 <li>• Check solution when board is complete</li>
+                <li>• Complete puzzle with animation</li>
                 <li>• Toggle between light and dark themes</li>
               </ul>
             </div>

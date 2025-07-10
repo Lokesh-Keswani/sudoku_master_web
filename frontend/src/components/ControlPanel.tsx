@@ -1,26 +1,25 @@
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { 
-  RotateCcw, 
-  RotateCw, 
+  Undo2, 
+  Redo2, 
   Lightbulb, 
-  CheckSquare,
-  AlertCircle,
-  CheckCircle,
-  XCircle
+  CheckSquare, 
+  Play,
+  RotateCcw
 } from 'lucide-react';
 import { useSudokuStore } from '../store/sudokuStore';
-import { isBoardComplete, isBoardValid, findConflictingCells } from '../utils/validator';
 
 interface Toast {
   id: string;
-  type: 'success' | 'error' | 'info';
+  type: 'success' | 'error' | 'info' | 'warning';
   message: string;
 }
 
 const ControlPanel: React.FC = () => {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [isChecking, setIsChecking] = useState(false);
+  const [isCompleting, setIsCompleting] = useState(false);
   const [conflictingCells, setConflictingCells] = useState<Array<{row: number, col: number}>>([]);
   const [solutionSteps, setSolutionSteps] = useState<any[]>([]);
   
@@ -29,6 +28,7 @@ const ControlPanel: React.FC = () => {
     redo,
     useHint,
     checkSolution,
+    completePuzzle,
     grid,
     undoStack,
     redoStack,
@@ -36,6 +36,11 @@ const ControlPanel: React.FC = () => {
     selectedCell,
     makeMove
   } = useSudokuStore();
+
+  // Helper function to check if board is complete
+  const isBoardComplete = (grid: any[][]) => {
+    return grid.flat().some(cell => cell.value === 0);
+  };
 
   const addToast = (type: Toast['type'], message: string) => {
     const id = Date.now().toString();
@@ -62,59 +67,112 @@ const ControlPanel: React.FC = () => {
     }
   };
 
-  const handleHint = () => {
-    useHint();
-    addToast('info', 'Hint revealed!');
+  const handleHint = async () => {
+    const success = await useHint();
+    if (success) {
+      addToast('success', 'Hint applied!');
+    } else {
+      addToast('error', 'No hints available or failed to apply hint');
+    }
   };
 
-  const handleCheckSolution = () => {
-    checkSolution();
-    addToast('info', 'Checking solution...');
+  const handleCheckSolution = async () => {
+    setIsChecking(true);
+    try {
+      const result = await checkSolution();
+      if (result.solved) {
+        addToast('success', 'Puzzle solved correctly!');
+      } else if (result.valid) {
+        addToast('info', 'Puzzle is valid but incomplete');
+      } else {
+        addToast('error', result.error || 'Puzzle has conflicts');
+      }
+    } catch (error) {
+      addToast('error', 'Failed to check solution');
+    } finally {
+      setIsChecking(false);
+    }
+  };
+
+  const handleCompletePuzzle = async () => {
+    setIsCompleting(true);
+    try {
+      const result = await completePuzzle();
+      if (result.completed) {
+        addToast('success', 'Puzzle completed successfully!');
+        
+        // Animate the completion by filling cells one by one
+        if (result.solutionPath) {
+          const emptyCells = [];
+          for (let row = 0; row < 9; row++) {
+            for (let col = 0; col < 9; col++) {
+              if (grid[row][col].value === 0 && result.solutionPath[row][col]) {
+                emptyCells.push({ row, col, value: result.solutionPath[row][col] });
+              }
+            }
+          }
+          
+          // Animate filling each cell
+          for (let i = 0; i < emptyCells.length; i++) {
+            const cell = emptyCells[i];
+            setTimeout(async () => {
+              await makeMove(cell.value);
+            }, i * 100); // 100ms delay between each cell
+          }
+        }
+      } else {
+        addToast('error', result.error || 'Failed to complete puzzle');
+      }
+    } catch (error) {
+      addToast('error', 'Failed to complete puzzle');
+    } finally {
+      setIsCompleting(false);
+    }
   };
 
   const isUndoDisabled = undoStack.length === 0;
   const isRedoDisabled = redoStack.length === 0;
   const isHintDisabled = hintsRemaining <= 0 || grid.flat().every(cell => cell.value !== 0);
   const isCheckDisabled = !isBoardComplete(grid);
+  const isCompleteDisabled = grid.flat().every(cell => cell.value !== 0);
 
   return (
-    <div className="space-y-4">
-      {/* Enhanced Game Controls */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-md">
-        <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-4">
-          Game Controls
-        </h3>
-        
-        <div className="grid grid-cols-2 gap-3">
+    <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-md">
+      <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-4">
+        Game Controls
+      </h3>
+
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-2">
           <motion.button
             whileHover={{ scale: isUndoDisabled ? 1 : 1.05 }}
             whileTap={{ scale: isUndoDisabled ? 1 : 0.95 }}
             onClick={handleUndo}
             disabled={isUndoDisabled}
             className={`p-3 rounded-lg transition-colors flex items-center justify-center gap-2 ${
-              isUndoDisabled 
+              isUndoDisabled
                 ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed' 
                 : 'bg-blue-500 text-white hover:bg-blue-600'
             }`}
             title="Undo last move"
           >
-            <RotateCcw className="w-4 h-4" />
+            <Undo2 className="w-4 h-4" />
             Undo
           </motion.button>
-          
+
           <motion.button
             whileHover={{ scale: isRedoDisabled ? 1 : 1.05 }}
             whileTap={{ scale: isRedoDisabled ? 1 : 0.95 }}
             onClick={handleRedo}
             disabled={isRedoDisabled}
             className={`p-3 rounded-lg transition-colors flex items-center justify-center gap-2 ${
-              isRedoDisabled 
+              isRedoDisabled
                 ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed' 
                 : 'bg-blue-500 text-white hover:bg-blue-600'
             }`}
             title="Redo last undone move"
           >
-            <RotateCw className="w-4 h-4" />
+            <Redo2 className="w-4 h-4" />
             Redo
           </motion.button>
         </div>
@@ -158,53 +216,49 @@ const ControlPanel: React.FC = () => {
             {isChecking ? 'Checking...' : 'Check Solution'}
           </motion.button>
         </div>
+
+        <div className="mt-3">
+          <motion.button
+            whileHover={{ scale: isCompleteDisabled ? 1 : 1.05 }}
+            whileTap={{ scale: isCompleteDisabled ? 1 : 0.95 }}
+            onClick={handleCompletePuzzle}
+            disabled={isCompleteDisabled || isCompleting}
+            className={`w-full p-3 rounded-lg transition-colors flex items-center justify-center gap-2 ${
+              isCompleteDisabled || isCompleting
+                ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed' 
+                : 'bg-purple-500 text-white hover:bg-purple-600'
+            }`}
+            title={isCompleteDisabled ? "Board is already complete" : "Complete the puzzle with animation"}
+          >
+            {isCompleting ? (
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+            ) : (
+              <Play className="w-4 h-4" />
+            )}
+            {isCompleting ? 'Completing...' : 'Complete Puzzle'}
+          </motion.button>
+        </div>
       </div>
 
       {/* Toast Notifications */}
-      <AnimatePresence>
+      <div className="fixed top-4 right-4 z-50 space-y-2">
         {toasts.map((toast) => (
           <motion.div
             key={toast.id}
-            initial={{ opacity: 0, y: 50, scale: 0.3 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.5, transition: { duration: 0.2 } }}
-            className={`fixed bottom-4 right-4 p-4 rounded-lg shadow-lg max-w-sm z-50 ${
-              toast.type === 'success' 
-                ? 'bg-green-500 text-white' 
-                : toast.type === 'error' 
-                ? 'bg-red-500 text-white' 
-                : 'bg-blue-500 text-white'
+            initial={{ opacity: 0, x: 300 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 300 }}
+            className={`px-4 py-2 rounded-lg shadow-lg text-white text-sm ${
+              toast.type === 'success' ? 'bg-green-500' :
+              toast.type === 'error' ? 'bg-red-500' :
+              toast.type === 'warning' ? 'bg-yellow-500' :
+              'bg-blue-500'
             }`}
           >
-            <div className="flex items-center gap-2">
-              {toast.type === 'success' && <CheckCircle className="w-5 h-5" />}
-              {toast.type === 'error' && <XCircle className="w-5 h-5" />}
-              {toast.type === 'info' && <AlertCircle className="w-5 h-5" />}
-              <span className="font-medium">{toast.message}</span>
-            </div>
+            {toast.message}
           </motion.div>
         ))}
-      </AnimatePresence>
-
-      {/* Solution Steps Display */}
-      {solutionSteps.length > 0 && (
-        <div className="mt-6 bg-white dark:bg-gray-800 rounded-lg p-4 shadow-md">
-          <h4 className="text-md font-semibold text-gray-800 dark:text-gray-200 mb-2">Step-by-Step Solution</h4>
-          <ol className="list-decimal list-inside space-y-2 text-sm text-gray-700 dark:text-gray-300">
-            {solutionSteps.map((step, idx) => (
-              <li key={idx} className="border-b border-gray-200 dark:border-gray-700 pb-2 mb-2 last:border-b-0 last:mb-0">
-                <span className="font-bold">Step {idx + 1}:</span> Place <span className="font-bold">{step.value}</span> at <span className="font-mono">R{step.row + 1}C{step.col + 1}</span>
-                {step.reason && (
-                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">{step.reason}</div>
-                )}
-                {step.strategy && (
-                  <div className="text-xs text-blue-500 dark:text-blue-300 mt-1">Strategy: {step.strategy}</div>
-                )}
-              </li>
-            ))}
-          </ol>
-        </div>
-      )}
+      </div>
     </div>
   );
 };

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Cell as CellType } from '../store/sudokuStore';
 import { isMoveValid, findConflictingCells } from '../utils/validator';
+import { useSudokuStore } from '../store/sudokuStore';
 
 interface CellProps {
   row: number;
@@ -26,13 +27,13 @@ const Cell: React.FC<CellProps> = ({
 }) => {
   const [isInvalid, setIsInvalid] = useState(false);
   const [lastValue, setLastValue] = useState(cell.value);
+  const { makeMove, grid } = useSudokuStore();
 
   // Check for invalid moves when value changes
   useEffect(() => {
     if (cell.value !== 0 && cell.value !== lastValue) {
       const conflicts = findConflictingCells(
-        // We need to get the current grid from the store
-        [], // This will be passed from parent component
+        grid,
         row,
         col,
         cell.value
@@ -46,7 +47,7 @@ const Cell: React.FC<CellProps> = ({
       
       setLastValue(cell.value);
     }
-  }, [cell.value, row, col, lastValue]);
+  }, [cell.value, row, col, lastValue, grid]);
 
   const handleClick = () => {
     if (!isFixed) {
@@ -54,16 +55,21 @@ const Cell: React.FC<CellProps> = ({
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = async (e: React.KeyboardEvent) => {
     if (isFixed) return;
 
     const key = e.key;
     if (key >= '1' && key <= '9') {
+      e.preventDefault();
       const value = parseInt(key);
-      // Validation will be handled by the parent component
-      onClick(row, col);
+      const success = await makeMove(value);
+      if (!success) {
+        setIsInvalid(true);
+        setTimeout(() => setIsInvalid(false), 1000);
+      }
     } else if (key === 'Backspace' || key === 'Delete') {
-      onClick(row, col);
+      e.preventDefault();
+      await makeMove(0);
     }
   };
 

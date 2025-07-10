@@ -41,10 +41,13 @@ export type GameState = {
   makeMove: (value: number) => Promise<boolean>;
   toggleNote: (row: number, col: number, value: number) => boolean;
   getHint: () => Promise<any>;
+  useHint: () => Promise<boolean>;
   checkSolution: () => Promise<any>;
+  completePuzzle: () => Promise<any>;
   undo: () => boolean;
   redo: () => boolean;
   erase: () => boolean;
+  saveState: () => void;
   startTimer: () => void;
   stopTimer: () => void;
   pauseTimer: () => void;
@@ -52,6 +55,8 @@ export type GameState = {
   getFormattedTime: () => string;
   setDifficulty: (difficulty: string) => void;
   resetGame: () => void;
+  toggleNotesMode: () => void;
+  updateNotes: (row: number, col: number, value: number) => void;
 };
 
 const API_URL = 'http://localhost:8000';
@@ -180,7 +185,7 @@ export const useSudokuStore = create<GameState>((set, get) => ({
     const newGrid = grid.map((r, i) => 
       r.map((c, j) => 
         i === row && j === col 
-          ? { ...c, value, notes: new Set() }
+          ? { ...c, value, notes: new Set<number>() }
           : c
       )
     );
@@ -244,6 +249,24 @@ export const useSudokuStore = create<GameState>((set, get) => ({
     return null;
   },
 
+  useHint: async () => {
+    const hint = await get().getHint();
+    if (hint && hint.row !== undefined && hint.col !== undefined && hint.value !== undefined) {
+      // Apply the hint to the grid
+      const { grid } = get();
+      const newGrid = grid.map((r, i) => 
+        r.map((c, j) => 
+          i === hint.row && j === hint.col 
+            ? { ...c, value: hint.value, notes: new Set<number>() }
+            : c
+        )
+      );
+      set({ grid: newGrid });
+      return true;
+    }
+    return false;
+  },
+
   checkSolution: async () => {
     const { grid, solution } = get();
     
@@ -268,6 +291,33 @@ export const useSudokuStore = create<GameState>((set, get) => ({
       console.error('Error checking solution:', error);
       return { solved: false, error: 'Check failed' };
     }
+  },
+
+  completePuzzle: async () => {
+    const { grid, solution } = get();
+    
+    if (!solution) {
+      return { completed: false, error: 'No solution available' };
+    }
+
+    // Find all empty cells and fill them with solution values
+    const newGrid = grid.map((row, rowIndex) => 
+      row.map((cell, colIndex) => {
+        if (cell.value === 0 && solution[rowIndex][colIndex]) {
+          return { ...cell, value: solution[rowIndex][colIndex], notes: new Set<number>() };
+        }
+        return cell;
+      })
+    );
+
+    set({ grid: newGrid });
+    get().stopTimer();
+    
+    return { 
+      completed: true, 
+      message: 'Puzzle completed successfully!',
+      solutionPath: solution
+    };
   },
 
   undo: () => {
@@ -316,7 +366,7 @@ export const useSudokuStore = create<GameState>((set, get) => ({
     const newGrid = grid.map((r, i) => 
       r.map((c, j) => 
         i === row && j === col 
-          ? { ...c, value: 0, notes: new Set() }
+          ? { ...c, value: 0, notes: new Set<number>() }
           : c
       )
     );
@@ -426,6 +476,15 @@ export const useSudokuStore = create<GameState>((set, get) => ({
 
   setDifficulty: (difficulty: string) => {
     set({ difficulty });
+  },
+
+  toggleNotesMode: () => {
+    const { isNotesMode } = get();
+    set({ isNotesMode: !isNotesMode });
+  },
+
+  updateNotes: (row: number, col: number, value: number) => {
+    get().toggleNote(row, col, value);
   },
 
   resetGame: () => {
