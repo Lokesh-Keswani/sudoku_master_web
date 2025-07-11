@@ -1,17 +1,39 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/router';
 import { Brain, Play, Trophy, BookOpen } from 'lucide-react';
+import { useAuth } from '../hooks/useAuth';
+import { GuestModeButton } from '../components/GuestModeButton';
 
 const HomePage: React.FC = () => {
   const router = useRouter();
+  const { user, loading } = useAuth();
+
+  // Redirect authenticated users to dashboard
+  useEffect(() => {
+    if (user && !loading) {
+      router.push('/dashboard');
+    }
+  }, [user, loading, router]);
 
   const handleTrainingClick = () => {
-    router.push('/training');
+    if (user) {
+      router.push('/training');
+    } else {
+      router.push('/login?redirect=/training');
+    }
   };
 
   const handlePlayClick = () => {
-    router.push('/game');
+    if (user) {
+      router.push('/game');
+    } else {
+      router.push('/login?redirect=/game');
+    }
+  };
+
+  const handleGuestStart = () => {
+    router.push('/dashboard');
   };
 
   return (
@@ -76,6 +98,31 @@ const HomePage: React.FC = () => {
               Start Training
             </motion.button>
           </div>
+
+          {/* Guest Mode Option */}
+          {!user && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, delay: 0.4 }}
+              className="mt-6"
+            >
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-gray-300" />
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="px-4 bg-gradient-to-br from-blue-50 to-indigo-100 text-gray-500">
+                    or
+                  </span>
+                </div>
+              </div>
+              
+              <div className="mt-6 flex justify-center">
+                <GuestModeButton onGuestStart={handleGuestStart} />
+              </div>
+            </motion.div>
+          )}
         </motion.div>
 
         {/* Features Grid */}

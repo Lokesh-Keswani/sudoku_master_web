@@ -7,7 +7,6 @@ import { databaseConfig, logDatabaseConfig } from '../config/database';
 const DatabaseStatus: React.FC = () => {
   const {
     isConnected,
-    mongoConnected,
     firestoreConnected,
     isLoading,
     error,
@@ -41,7 +40,7 @@ const DatabaseStatus: React.FC = () => {
       // Test basic operations
       const testUserId = 'test-user-' + Date.now();
       
-      // Test MongoDB operations
+      // Test API operations
       if (databaseConfig.features.enableUserStats) {
         try {
           await saveUserStats(testUserId, {
@@ -192,11 +191,11 @@ const DatabaseStatus: React.FC = () => {
           </div>
 
           <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-            <span className="text-sm font-medium text-gray-600 dark:text-gray-300">MongoDB</span>
+            <span className="text-sm font-medium text-gray-600 dark:text-gray-300">API Server</span>
             <div className="flex items-center space-x-2">
-              {getStatusIcon(mongoConnected)}
-              <span className={`text-sm font-medium ${getStatusColor(mongoConnected)}`}>
-                {getStatusText(mongoConnected)}
+              {getStatusIcon(isConnected)}
+              <span className={`text-sm font-medium ${getStatusColor(isConnected)}`}>
+                {getStatusText(isConnected)}
               </span>
             </div>
           </div>
@@ -299,7 +298,7 @@ const DatabaseStatus: React.FC = () => {
           Environment Info
         </h4>
         <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
-          <div>MongoDB Enabled: {databaseConfig.mongo.enabled ? 'Yes' : 'No'}</div>
+          <div>API Server Enabled: {databaseConfig.mongo.enabled ? 'Yes' : 'No'}</div>
           <div>Firestore Enabled: {databaseConfig.firestore.enabled ? 'Yes' : 'No'}</div>
           <div>Database URI Set: {databaseConfig.mongo.uri !== 'mongodb://localhost:27017' ? 'Yes' : 'No'}</div>
           <div>Firebase Project Set: {databaseConfig.firestore.projectId ? 'Yes' : 'No'}</div>

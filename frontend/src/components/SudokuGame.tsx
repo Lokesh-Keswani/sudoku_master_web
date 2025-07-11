@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Play, Pause, Settings, CheckCircle } from 'lucide-react';
+import { Play, Pause, Settings, CheckCircle, FileText } from 'lucide-react';
 import { useSudokuStore } from '../store/sudokuStore';
 import { useThemeStore } from '../store/themeStore';
 import SudokuGrid from './SudokuGrid';
 import NumberPad from './NumberPad';
 import ControlPanel from './ControlPanel';
 import ThemeToggle from './ThemeToggle';
+import SolveReportModal from './SolveReportModal';
 
 const SudokuGame: React.FC = () => {
   const {
@@ -18,6 +19,8 @@ const SudokuGame: React.FC = () => {
     hintsRemaining,
     undoStack,
     redoStack,
+    initialGrid,
+    showSolutionReport,
     newGame,
     pauseTimer,
     resumeTimer,
@@ -25,7 +28,9 @@ const SudokuGame: React.FC = () => {
     setDifficulty,
     makeMove,
     selectCell,
-    toggleNotesMode
+    toggleNotesMode,
+    showSolutionReportModal,
+    hideSolutionReportModal
   } = useSudokuStore();
 
   const { theme } = useThemeStore();
@@ -334,15 +339,36 @@ const SudokuGame: React.FC = () => {
               <CheckCircle className="w-16 h-16 text-green-500 mb-4" />
               <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100 mb-2">Congratulations!</h2>
               <p className="text-gray-600 dark:text-gray-300 mb-4">You solved the puzzle!</p>
-              <button
-                className="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-                onClick={() => setShowCongrats(false)}
-              >
-                Close
-              </button>
+              <div className="flex gap-3">
+                <button
+                  className="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2"
+                  onClick={showSolutionReportModal}
+                >
+                  <FileText size={16} />
+                  View Solution Report
+                </button>
+                <button
+                  className="px-6 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+                  onClick={() => setShowCongrats(false)}
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </motion.div>
         )}
+
+        {/* Solution Report Modal */}
+        <SolveReportModal
+          isOpen={showSolutionReport}
+          onClose={hideSolutionReportModal}
+          initialGrid={initialGrid}
+          solution={grid.map(row => row.map(cell => cell.value))}
+          solvingTime={timer.elapsedTime}
+          difficulty={difficulty}
+          hintsUsed={3 - hintsRemaining}
+          checkCount={0}
+        />
       </div>
     </div>
   );

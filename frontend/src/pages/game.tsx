@@ -4,6 +4,7 @@ import { ArrowLeft } from 'lucide-react';
 import { useRouter } from 'next/router';
 import SudokuGame from '../components/SudokuGame';
 import { useSudokuStore } from '../store/sudokuStore';
+import { ProtectedRoute } from '../components/ProtectedRoute';
 
 const GamePage: React.FC = () => {
   const router = useRouter();
@@ -93,13 +94,15 @@ const GamePage: React.FC = () => {
   }
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.3 }}
-    >
-      <SudokuGame />
-    </motion.div>
+    <ProtectedRoute>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.3 }}
+      >
+        <SudokuGame />
+      </motion.div>
+    </ProtectedRoute>
   );
 };
 

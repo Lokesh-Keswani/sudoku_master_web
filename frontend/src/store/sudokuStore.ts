@@ -35,6 +35,10 @@ export type GameState = {
   isCreating: boolean;
   isPlaying: boolean;
   
+  // Solution Report
+  showSolutionReport: boolean;
+  initialGrid: number[][];
+  
   // Actions
   newGame: (difficulty?: string) => Promise<boolean>;
   selectCell: (row: number, col: number) => boolean;
@@ -57,6 +61,8 @@ export type GameState = {
   resetGame: () => void;
   toggleNotesMode: () => void;
   updateNotes: (row: number, col: number, value: number) => void;
+  showSolutionReportModal: () => void;
+  hideSolutionReportModal: () => void;
 };
 
 const API_URL = 'http://localhost:8000';
@@ -88,6 +94,8 @@ export const useSudokuStore = create<GameState>((set, get) => ({
   redoStack: [],
   isCreating: false,
   isPlaying: false,
+  showSolutionReport: false,
+  initialGrid: Array(9).fill(null).map(() => Array(9).fill(0)),
 
   // Actions
   newGame: async (difficulty = 'medium') => {
@@ -139,6 +147,8 @@ export const useSudokuStore = create<GameState>((set, get) => ({
         redoStack: [],
         isCreating: false,
         isPlaying: true,
+        showSolutionReport: false,
+        initialGrid: data.grid,
         timer: {
           startTime: Date.now(),
           elapsedTime: 0,
@@ -505,6 +515,8 @@ export const useSudokuStore = create<GameState>((set, get) => ({
       redoStack: [],
       isCreating: false,
       isPlaying: false,
+      showSolutionReport: false,
+      initialGrid: Array(9).fill(null).map(() => Array(9).fill(0)),
       timer: {
         startTime: 0,
         elapsedTime: 0,
@@ -512,5 +524,13 @@ export const useSudokuStore = create<GameState>((set, get) => ({
         isGameComplete: false
       }
     });
+  },
+
+  showSolutionReportModal: () => {
+    set({ showSolutionReport: true });
+  },
+
+  hideSolutionReportModal: () => {
+    set({ showSolutionReport: false });
   }
 })); 

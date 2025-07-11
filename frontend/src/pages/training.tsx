@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/router';
 import TrainingCard from '../components/TrainingCard';
+import { ProtectedRoute } from '../components/ProtectedRoute';
 import { 
   Puzzle, 
   Search, 
@@ -82,7 +83,8 @@ const TrainingPage: React.FC = () => {
   const router = useRouter();
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+    <ProtectedRoute>
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       {/* Navbar */}
       <nav className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -171,6 +173,7 @@ const TrainingPage: React.FC = () => {
         </motion.div>
       </div>
     </div>
+    </ProtectedRoute>
   );
 };
 

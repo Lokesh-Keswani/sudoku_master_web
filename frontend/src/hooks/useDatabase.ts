@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { mongoClient } from '../database/mongoClient';
 import { firestoreClient } from '../database/firestoreClient';
-import { databaseConfig, isDatabaseEnabled, isMongoEnabled, isFirestoreEnabled } from '../config/database';
+import { databaseConfig, isDatabaseEnabled, isFirestoreEnabled } from '../config/database';
 import type {
   UserStats,
   SavedPuzzle,
@@ -11,11 +10,10 @@ import type {
   LiveGame,
   RealTimeLeaderboard,
   GameSession
-} from '../database/mongoClient';
+} from '../database/mongoClientTypes';
 
 interface DatabaseState {
   isConnected: boolean;
-  mongoConnected: boolean;
   firestoreConnected: boolean;
   isLoading: boolean;
   error: string | null;
@@ -64,7 +62,6 @@ interface DatabaseOperations {
 export function useDatabase(): DatabaseState & DatabaseOperations {
   const [state, setState] = useState<DatabaseState>({
     isConnected: false,
-    mongoConnected: false,
     firestoreConnected: false,
     isLoading: true,
     error: null,
@@ -81,13 +78,6 @@ export function useDatabase(): DatabaseState & DatabaseOperations {
       try {
         setState(prev => ({ ...prev, isLoading: true, error: null }));
 
-        // Initialize MongoDB
-        if (isMongoEnabled()) {
-          await mongoClient.connect();
-          const mongoStatus = await mongoClient.getConnectionStatus();
-          setState(prev => ({ ...prev, mongoConnected: mongoStatus }));
-        }
-
         // Initialize Firestore
         if (isFirestoreEnabled()) {
           await firestoreClient.connect();
@@ -97,8 +87,7 @@ export function useDatabase(): DatabaseState & DatabaseOperations {
 
         setState(prev => ({
           ...prev,
-          isConnected: (isMongoEnabled() ? state.mongoConnected : true) && 
-                      (isFirestoreEnabled() ? state.firestoreConnected : true),
+          isConnected: isFirestoreEnabled() ? state.firestoreConnected : true,
           isLoading: false,
         }));
       } catch (error) {
@@ -115,16 +104,20 @@ export function useDatabase(): DatabaseState & DatabaseOperations {
 
     // Cleanup on unmount
     return () => {
-      mongoClient.disconnect();
       firestoreClient.disconnect();
     };
   }, []);
 
-  // MongoDB Operations
+  // MongoDB Operations via API
   const saveUserStats = useCallback(async (userId: string, statsData: Partial<UserStats>): Promise<void> => {
     if (!databaseConfig.features.enableUserStats) return;
     try {
-      await mongoClient.saveUserStats(userId, statsData);
+      const response = await fetch('/api/user/stats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, statsData }),
+      });
+      if (!response.ok) throw new Error('Failed to save user stats');
     } catch (error) {
       console.error('Error saving user stats:', error);
       throw error;
@@ -134,7 +127,9 @@ export function useDatabase(): DatabaseState & DatabaseOperations {
   const fetchUserStats = useCallback(async (userId: string): Promise<UserStats | null> => {
     if (!databaseConfig.features.enableUserStats) return null;
     try {
-      return await mongoClient.fetchUserStats(userId);
+      const response = await fetch(`/api/user/stats/${userId}`);
+      if (!response.ok) return null;
+      return await response.json();
     } catch (error) {
       console.error('Error fetching user stats:', error);
       throw error;
@@ -144,7 +139,12 @@ export function useDatabase(): DatabaseState & DatabaseOperations {
   const updateUserStats = useCallback(async (userId: string, statsData: Partial<UserStats>): Promise<void> => {
     if (!databaseConfig.features.enableUserStats) return;
     try {
-      await mongoClient.updateUserStats(userId, statsData);
+      const response = await fetch(`/api/user/stats/${userId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(statsData),
+      });
+      if (!response.ok) throw new Error('Failed to update user stats');
     } catch (error) {
       console.error('Error updating user stats:', error);
       throw error;
@@ -154,7 +154,12 @@ export function useDatabase(): DatabaseState & DatabaseOperations {
   const savePuzzle = useCallback(async (userId: string, puzzleData: Omit<SavedPuzzle, 'userId' | 'createdAt' | 'lastPlayed'>): Promise<void> => {
     if (!databaseConfig.features.enableSavedPuzzles) return;
     try {
-      await mongoClient.savePuzzle(userId, puzzleData);
+      const response = await fetch('/api/user/puzzles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, puzzleData }),
+      });
+      if (!response.ok) throw new Error('Failed to save puzzle');
     } catch (error) {
       console.error('Error saving puzzle:', error);
       throw error;
@@ -164,7 +169,9 @@ export function useDatabase(): DatabaseState & DatabaseOperations {
   const fetchSavedPuzzles = useCallback(async (userId: string): Promise<SavedPuzzle[]> => {
     if (!databaseConfig.features.enableSavedPuzzles) return [];
     try {
-      return await mongoClient.fetchSavedPuzzles(userId);
+      const response = await fetch(`/api/user/puzzles/${userId}`);
+      if (!response.ok) return [];
+      return await response.json();
     } catch (error) {
       console.error('Error fetching saved puzzles:', error);
       throw error;
@@ -174,7 +181,12 @@ export function useDatabase(): DatabaseState & DatabaseOperations {
   const saveUserReport = useCallback(async (userId: string, puzzleId: string, reportType: UserReport['reportType'], reportData: UserReport['reportData']): Promise<void> => {
     if (!databaseConfig.features.enableUserReports) return;
     try {
-      await mongoClient.saveUserReport(userId, puzzleId, reportType, reportData);
+      const response = await fetch('/api/user/reports', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, puzzleId, reportType, reportData }),
+      });
+      if (!response.ok) throw new Error('Failed to save user report');
     } catch (error) {
       console.error('Error saving user report:', error);
       throw error;
@@ -184,7 +196,12 @@ export function useDatabase(): DatabaseState & DatabaseOperations {
   const fetchUserReports = useCallback(async (userId: string, reportType?: UserReport['reportType']): Promise<UserReport[]> => {
     if (!databaseConfig.features.enableUserReports) return [];
     try {
-      return await mongoClient.fetchUserReports(userId, reportType);
+      const url = reportType 
+        ? `/api/user/reports/${userId}?type=${reportType}`
+        : `/api/user/reports/${userId}`;
+      const response = await fetch(url);
+      if (!response.ok) return [];
+      return await response.json();
     } catch (error) {
       console.error('Error fetching user reports:', error);
       throw error;
@@ -194,7 +211,12 @@ export function useDatabase(): DatabaseState & DatabaseOperations {
   const markPuzzleAsSolved = useCallback(async (userId: string, puzzleId: string, solveData: Omit<CompletedPuzzle, 'userId' | 'puzzleId' | 'completedAt'>): Promise<void> => {
     if (!databaseConfig.features.enableCompletedPuzzles) return;
     try {
-      await mongoClient.markPuzzleAsSolved(userId, puzzleId, solveData);
+      const response = await fetch('/api/user/completed-puzzles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, puzzleId, solveData }),
+      });
+      if (!response.ok) throw new Error('Failed to mark puzzle as solved');
     } catch (error) {
       console.error('Error marking puzzle as solved:', error);
       throw error;
@@ -204,7 +226,12 @@ export function useDatabase(): DatabaseState & DatabaseOperations {
   const fetchCompletedPuzzles = useCallback(async (userId: string, difficulty?: string): Promise<CompletedPuzzle[]> => {
     if (!databaseConfig.features.enableCompletedPuzzles) return [];
     try {
-      return await mongoClient.fetchCompletedPuzzles(userId, difficulty);
+      const url = difficulty 
+        ? `/api/user/completed-puzzles/${userId}?difficulty=${difficulty}`
+        : `/api/user/completed-puzzles/${userId}`;
+      const response = await fetch(url);
+      if (!response.ok) return [];
+      return await response.json();
     } catch (error) {
       console.error('Error fetching completed puzzles:', error);
       throw error;
@@ -213,7 +240,12 @@ export function useDatabase(): DatabaseState & DatabaseOperations {
 
   const saveLeaderboardScore = useCallback(async (userId: string, username: string, scoreData: Omit<LeaderboardScore, 'userId' | 'username' | 'timestamp'>): Promise<void> => {
     try {
-      await mongoClient.saveLeaderboardScore(userId, username, scoreData);
+      const response = await fetch('/api/leaderboard', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, username, scoreData }),
+      });
+      if (!response.ok) throw new Error('Failed to save leaderboard score');
     } catch (error) {
       console.error('Error saving leaderboard score:', error);
       throw error;
@@ -222,7 +254,14 @@ export function useDatabase(): DatabaseState & DatabaseOperations {
 
   const fetchLeaderboard = useCallback(async (difficulty?: string, technique?: string, limit?: number): Promise<LeaderboardScore[]> => {
     try {
-      return await mongoClient.fetchLeaderboard(difficulty, technique, limit);
+      const params = new URLSearchParams();
+      if (difficulty) params.append('difficulty', difficulty);
+      if (technique) params.append('technique', technique);
+      if (limit) params.append('limit', limit.toString());
+      
+      const response = await fetch(`/api/leaderboard?${params.toString()}`);
+      if (!response.ok) return [];
+      return await response.json();
     } catch (error) {
       console.error('Error fetching leaderboard:', error);
       throw error;
@@ -344,9 +383,8 @@ export function useDatabase(): DatabaseState & DatabaseOperations {
   // Utility Operations
   const ping = useCallback(async (): Promise<boolean> => {
     try {
-      const mongoPing = isMongoEnabled() ? await mongoClient.ping() : true;
       const firestorePing = isFirestoreEnabled() ? await firestoreClient.ping() : true;
-      return mongoPing && firestorePing;
+      return firestorePing;
     } catch (error) {
       console.error('Database ping failed:', error);
       return false;
@@ -354,15 +392,8 @@ export function useDatabase(): DatabaseState & DatabaseOperations {
   }, []);
 
   const getConnectionStatus = useCallback(async (): Promise<boolean> => {
-    try {
-      const mongoStatus = isMongoEnabled() ? await mongoClient.getConnectionStatus() : true;
-      const firestoreStatus = isFirestoreEnabled() ? await firestoreClient.getConnectionStatus() : true;
-      return mongoStatus && firestoreStatus;
-    } catch (error) {
-      console.error('Error getting connection status:', error);
-      return false;
-    }
-  }, []);
+    return state.isConnected;
+  }, [state.isConnected]);
 
   return {
     ...state,

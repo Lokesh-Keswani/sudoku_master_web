@@ -1,75 +1,13 @@
 import { MongoClient, Db, Collection } from 'mongodb';
+import type { UserStats, SavedPuzzle, UserReport, CompletedPuzzle, LeaderboardScore } from './mongoClientTypes';
 
-// Types for MongoDB operations
-export interface UserStats {
-  userId: string;
-  totalPuzzlesSolved: number;
-  averageSolveTime: number;
-  fastestSolveTime: number;
-  slowestSolveTime: number;
-  difficultyBreakdown: {
-    easy: number;
-    medium: number;
-    hard: number;
-    expert: number;
-    master: number;
-  };
-  techniquesUsed: {
-    [technique: string]: number;
-  };
-  lastUpdated: Date;
+// Server-side only check
+if (typeof window !== 'undefined') {
+  throw new Error('MongoDB client should only be used on the server side');
 }
 
-export interface SavedPuzzle {
-  userId: string;
-  puzzleId: string;
-  puzzle: number[][];
-  solution: number[][];
-  difficulty: string;
-  createdAt: Date;
-  lastPlayed: Date;
-  isCompleted: boolean;
-  solveTime?: number;
-}
-
-export interface UserReport {
-  userId: string;
-  puzzleId: string;
-  reportType: 'solution' | 'training' | 'speed_scanning' | 'technique_practice';
-  reportData: {
-    accuracy: number;
-    timeSpent: number;
-    mistakes: number;
-    technique?: string;
-    difficulty?: string;
-    score?: number;
-    [key: string]: any;
-  };
-  createdAt: Date;
-}
-
-export interface CompletedPuzzle {
-  userId: string;
-  puzzleId: string;
-  puzzle: number[][];
-  solution: number[][];
-  difficulty: string;
-  solveTime: number;
-  mistakes: number;
-  hintsUsed: number;
-  technique: string;
-  completedAt: Date;
-}
-
-export interface LeaderboardScore {
-  userId: string;
-  username: string;
-  score: number;
-  difficulty: string;
-  technique: string;
-  solveTime: number;
-  timestamp: Date;
-}
+// Re-export types for convenience
+export type { UserStats, SavedPuzzle, UserReport, CompletedPuzzle, LeaderboardScore };
 
 class MongoClientManager {
   private client: MongoClient | null = null;
@@ -464,13 +402,4 @@ class MongoClientManager {
 }
 
 // Export singleton instance
-export const mongoClient = new MongoClientManager();
-
-// Export types for use in other modules
-export type {
-  UserStats,
-  SavedPuzzle,
-  UserReport,
-  CompletedPuzzle,
-  LeaderboardScore
-}; 
+export const mongoClient = new MongoClientManager(); 
