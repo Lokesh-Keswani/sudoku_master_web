@@ -75,7 +75,7 @@ const Cell: React.FC<CellProps> = ({
 
   // Determine cell styling based on state
   const getCellClasses = () => {
-    let baseClasses = 'w-12 h-12 border border-gray-300 dark:border-gray-600 flex items-center justify-center text-lg font-medium cursor-pointer transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50';
+    let baseClasses = 'w-full h-full border border-gray-300 dark:border-gray-600 flex items-center justify-center text-sm sm:text-base md:text-lg font-medium cursor-pointer transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 min-h-8 sm:min-h-10 md:min-h-12';
 
     // Box borders for 3x3 grid separation
     if (col === 2 || col === 5) {

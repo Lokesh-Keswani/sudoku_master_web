@@ -85,17 +85,16 @@ const SudokuGrid: React.FC = () => {
     return 'normal';
   };
 
-  // Modern, clean grid styling
+  // Modern, clean grid styling with mobile responsiveness
   return (
     <motion.div
-      className="relative mx-auto"
-      style={{ maxWidth: 432, width: '100%' }}
+      className="relative mx-auto w-full max-w-sm sm:max-w-md md:max-w-lg lg:max-w-xl"
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.3 }}
     >
       <div
-        className="grid grid-cols-9 grid-rows-9 bg-white dark:bg-gray-900 rounded-lg overflow-hidden border-4 border-gray-400 dark:border-gray-600 shadow-lg"
+        className="grid grid-cols-9 grid-rows-9 bg-white dark:bg-gray-900 rounded-lg overflow-hidden border-2 sm:border-4 border-gray-400 dark:border-gray-600 shadow-lg aspect-square"
         style={{ boxSizing: 'content-box' }}
       >
         {grid.map((row, rowIndex) =>
@@ -114,7 +113,7 @@ const SudokuGrid: React.FC = () => {
               <div
                 key={`${rowIndex}-${colIndex}`}
                 className={borderClasses}
-                style={{ width: 48, height: 48, minWidth: 32, minHeight: 32, background: 'inherit' }}
+                style={{ background: 'inherit' }}
               >
                 <Cell
                   row={rowIndex}

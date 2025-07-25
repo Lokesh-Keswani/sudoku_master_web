@@ -159,16 +159,16 @@ const SudokuGame: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-4 py-8 pb-32 lg:pb-8">
         {/* Header with Theme Toggle */}
         <motion.div 
-          className="flex items-center justify-between mb-8"
+          className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 sm:mb-8 gap-4"
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
         >
           <div className="flex items-center space-x-4">
-            <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-200">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 dark:text-gray-200">
               Sudoku Master
             </h1>
             <div className="text-sm text-gray-600 dark:text-gray-400">
@@ -185,9 +185,9 @@ const SudokuGame: React.FC = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.1 }}
         >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <div className="text-2xl font-mono font-bold text-gray-800 dark:text-gray-200">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center justify-center sm:justify-start space-x-4">
+              <div className="text-xl sm:text-2xl font-mono font-bold text-gray-800 dark:text-gray-200">
                 {getFormattedTime()}
               </div>
               <motion.button
@@ -201,12 +201,12 @@ const SudokuGame: React.FC = () => {
               </motion.button>
             </div>
             
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center justify-center sm:justify-end space-x-3">
               <select
                 value={difficulty}
                 onChange={(e) => handleDifficultyChange(e.target.value)}
                 disabled={isLoading}
-                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed text-sm"
               >
                 <option value="easy">Easy</option>
                 <option value="medium">Medium</option>
@@ -220,7 +220,7 @@ const SudokuGame: React.FC = () => {
                 whileTap={{ scale: isLoading ? 1 : 0.95 }}
                 onClick={handleNewGame}
                 disabled={isLoading}
-                className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-3 sm:px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                 title="Start a new game"
               >
                 {isLoading ? (
@@ -228,7 +228,8 @@ const SudokuGame: React.FC = () => {
                 ) : (
                   <Play className="w-4 h-4" />
                 )}
-                {isLoading ? 'Loading...' : 'New Game'}
+                <span className="hidden sm:inline">{isLoading ? 'Loading...' : 'New Game'}</span>
+                <span className="sm:hidden">{isLoading ? '...' : 'New'}</span>
               </motion.button>
             </div>
           </div>
@@ -236,37 +237,37 @@ const SudokuGame: React.FC = () => {
 
         {/* Game Stats */}
         <motion.div 
-          className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6"
+          className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-6"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.2 }}
         >
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-md text-center">
-            <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-3 sm:p-4 shadow-md text-center">
+            <div className="text-lg sm:text-2xl font-bold text-blue-600 dark:text-blue-400">
               {hintsRemaining}
             </div>
-            <div className="text-sm text-gray-600 dark:text-gray-400">Hints Left</div>
+            <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Hints Left</div>
           </div>
           
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-md text-center">
-            <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-3 sm:p-4 shadow-md text-center">
+            <div className="text-lg sm:text-2xl font-bold text-green-600 dark:text-green-400">
               {undoStack.length}
             </div>
-            <div className="text-sm text-gray-600 dark:text-gray-400">Undo Stack</div>
+            <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Undo Stack</div>
           </div>
           
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-md text-center">
-            <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-3 sm:p-4 shadow-md text-center">
+            <div className="text-lg sm:text-2xl font-bold text-purple-600 dark:text-purple-400">
               {redoStack.length}
             </div>
-            <div className="text-sm text-gray-600 dark:text-gray-400">Redo Stack</div>
+            <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Redo Stack</div>
           </div>
           
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-md text-center">
-            <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-3 sm:p-4 shadow-md text-center">
+            <div className="text-lg sm:text-2xl font-bold text-orange-600 dark:text-orange-400">
               {isNotesMode ? 'ON' : 'OFF'}
             </div>
-            <div className="text-sm text-gray-600 dark:text-gray-400">Notes Mode</div>
+            <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Notes Mode</div>
           </div>
         </motion.div>
 
@@ -274,7 +275,7 @@ const SudokuGame: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Sudoku Grid */}
           <motion.div 
-            className="lg:col-span-2 flex justify-center"
+            className="lg:col-span-2 flex justify-center px-4 sm:px-6"
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.5, delay: 0.3 }}
@@ -282,9 +283,9 @@ const SudokuGame: React.FC = () => {
             <SudokuGrid />
           </motion.div>
 
-          {/* Controls Sidebar */}
+          {/* Controls Sidebar - Hidden on mobile, NumberPad is fixed at bottom */}
           <motion.div 
-            className="space-y-6"
+            className="space-y-6 hidden lg:block"
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.5, delay: 0.4 }}
@@ -294,14 +295,19 @@ const SudokuGame: React.FC = () => {
           </motion.div>
         </div>
 
+        {/* Mobile NumberPad - Fixed at bottom */}
+        <div className="lg:hidden">
+          <NumberPad />
+        </div>
+
         {/* Game Instructions */}
         <motion.div 
-          className="mt-8 bg-white dark:bg-gray-800 rounded-lg p-6 shadow-md"
+          className="mt-8 bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 shadow-md"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.5 }}
         >
-          <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-4">
+          <h3 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-gray-200 mb-3 sm:mb-4">
             How to Play
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600 dark:text-gray-400">

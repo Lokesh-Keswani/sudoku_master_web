@@ -67,12 +67,8 @@ const TechniquesTrainer: React.FC = () => {
   };
 
   const handlePractice = (technique: Technique) => {
-    if (technique.practiceRoute) {
-      router.push(technique.practiceRoute);
-    } else {
-      // Fallback to general practice page
-      router.push('/training');
-    }
+    // Navigate to the practice page with the technique name
+    router.push(`/training/practice/${technique.id}`);
   };
 
   const handleCloseModal = () => {

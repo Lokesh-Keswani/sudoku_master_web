@@ -8,7 +8,7 @@
   }
   
   body {
-    @apply bg-sudoku-bg text-white;
+    @apply bg-white dark:bg-sudoku-bg text-gray-900 dark:text-white transition-colors duration-300;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
       'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
       sans-serif;
@@ -19,15 +19,15 @@
 
 @layer components {
   .glass-card {
-    @apply bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl shadow-glass;
+    @apply bg-white/80 dark:bg-white/10 backdrop-blur-md border border-gray-200/50 dark:border-white/20 rounded-2xl shadow-glass transition-colors duration-300;
   }
   
   .glass-card-hover {
-    @apply hover:bg-white/15 hover:border-white/30 hover:shadow-glass-hover transition-all duration-300;
+    @apply hover:bg-white/90 dark:hover:bg-white/15 hover:border-gray-300/50 dark:hover:border-white/30 hover:shadow-glass-hover transition-all duration-300;
   }
   
   .gradient-text {
-    @apply bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent;
+    @apply bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-gray-300 bg-clip-text text-transparent;
   }
   
   .btn-primary {
@@ -35,7 +35,7 @@
   }
   
   .btn-secondary {
-    @apply bg-white/10 text-white px-6 py-3 rounded-lg font-medium hover:bg-white/20 transition-all duration-200 border border-white/20;
+    @apply bg-gray-100 dark:bg-white/10 text-gray-900 dark:text-white px-6 py-3 rounded-lg font-medium hover:bg-gray-200 dark:hover:bg-white/20 transition-all duration-200 border border-gray-200 dark:border-white/20;
   }
 }
 
@@ -54,6 +54,16 @@
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
+  
+  /* Mobile-specific utilities */
+  .mobile-safe-area {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
 }
 
 /* Custom scrollbar */
@@ -62,15 +72,15 @@
 }
 
 ::-webkit-scrollbar-track {
-  @apply bg-slate-800;
+  @apply bg-gray-100 dark:bg-slate-800;
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-slate-600 rounded-full;
+  @apply bg-gray-300 dark:bg-slate-600 rounded-full;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  @apply bg-slate-500;
+  @apply bg-gray-400 dark:bg-slate-500;
 }
 
 /* Loading animation */

@@ -3,6 +3,8 @@ import { motion } from 'framer-motion';
 import { useRouter } from 'next/router';
 import TrainingCard from '../components/TrainingCard';
 import { ProtectedRoute } from '../components/ProtectedRoute';
+import ThemeToggle from '../components/ThemeToggle';
+import { useThemeStore } from '../store/themeStore';
 import { 
   Puzzle, 
   Search, 
@@ -81,29 +83,33 @@ const containerVariants = {
 
 const TrainingPage: React.FC = () => {
   const router = useRouter();
+  const { theme } = useThemeStore();
 
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 transition-colors duration-300">
       {/* Navbar */}
-      <nav className="bg-white shadow-sm border-b border-gray-200">
+      <nav className="bg-white dark:bg-gray-900 shadow-sm border-b border-gray-200 dark:border-gray-700 transition-colors duration-300">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
-              <h1 className="text-xl font-bold text-gray-800">Sudoku Master</h1>
+              <h1 className="text-xl font-bold text-gray-800 dark:text-white">Sudoku Master</h1>
             </div>
             <div className="hidden md:block">
               <div className="ml-10 flex items-baseline space-x-4">
-                <a href="/" className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
+                <a href="/" className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors">
                   Home
                 </a>
-                <a href="/game" className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
+                <a href="/game" className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors">
                   Play
                 </a>
-                <a href="/training" className="text-blue-600 bg-blue-50 px-3 py-2 rounded-md text-sm font-medium">
+                <a href="/training" className="text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-3 py-2 rounded-md text-sm font-medium transition-colors">
                   Training
                 </a>
               </div>
+            </div>
+            <div className="flex items-center space-x-4">
+              <ThemeToggle />
             </div>
           </div>
         </div>
@@ -118,10 +124,10 @@ const TrainingPage: React.FC = () => {
           transition={{ duration: 0.6 }}
           className="text-center mb-12"
         >
-          <h1 className="text-4xl md:text-6xl font-bold text-gray-800 mb-4">
+          <h1 className="text-4xl md:text-6xl font-bold text-gray-800 dark:text-white mb-4 transition-colors">
             Training Center
           </h1>
-          <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+          <p className="text-xl text-gray-600 dark:text-gray-300 max-w-3xl mx-auto transition-colors">
             Master the art of Sudoku with our comprehensive training modules designed to improve your skills systematically.
           </p>
         </motion.div>
@@ -151,23 +157,23 @@ const TrainingPage: React.FC = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.8 }}
-          className="mt-16 bg-white rounded-2xl p-8 shadow-lg border border-gray-200"
+          className="mt-16 bg-white dark:bg-gray-800 rounded-2xl p-8 shadow-lg border border-gray-200 dark:border-gray-700 transition-colors duration-300"
         >
-          <h2 className="text-2xl font-bold text-gray-800 mb-6 text-center">
+          <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-6 text-center transition-colors">
             Your Training Progress
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="text-center">
-              <div className="text-3xl font-bold text-blue-600">12</div>
-              <div className="text-gray-600">Techniques Mastered</div>
+              <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">12</div>
+              <div className="text-gray-600 dark:text-gray-300">Techniques Mastered</div>
             </div>
             <div className="text-center">
-              <div className="text-3xl font-bold text-green-600">156</div>
-              <div className="text-gray-600">Puzzles Completed</div>
+              <div className="text-3xl font-bold text-green-600 dark:text-green-400">156</div>
+              <div className="text-gray-600 dark:text-gray-300">Puzzles Completed</div>
             </div>
             <div className="text-center">
-              <div className="text-3xl font-bold text-purple-600">8.5</div>
-              <div className="text-gray-600">Average Rating</div>
+              <div className="text-3xl font-bold text-purple-600 dark:text-purple-400">8.5</div>
+              <div className="text-gray-600 dark:text-gray-300">Average Rating</div>
             </div>
           </div>
         </motion.div>
