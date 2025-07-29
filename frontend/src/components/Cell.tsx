@@ -13,6 +13,8 @@ interface CellProps {
   isFixed: boolean;
   onClick: (row: number, col: number) => void;
   isConflicting?: boolean;
+  sparkle?: boolean;
+  isHinted?: boolean;
 }
 
 const Cell: React.FC<CellProps> = ({
@@ -23,11 +25,33 @@ const Cell: React.FC<CellProps> = ({
   isHighlighted,
   isFixed,
   onClick,
-  isConflicting = false
+  isConflicting = false,
+  sparkle = false,
+  isHinted = false
 }) => {
   const [isInvalid, setIsInvalid] = useState(false);
   const [lastValue, setLastValue] = useState(cell.value);
   const { makeMove, grid } = useSudokuStore();
+  const [showSparkle, setShowSparkle] = useState(false);
+  const [showHintGlow, setShowHintGlow] = useState(false);
+
+  // Sparkle effect when sparkle prop is true
+  useEffect(() => {
+    if (sparkle) {
+      setShowSparkle(true);
+      const timeout = setTimeout(() => setShowSparkle(false), 1200);
+      return () => clearTimeout(timeout);
+    }
+  }, [sparkle, cell.value]);
+
+  // Hint glow effect
+  useEffect(() => {
+    if (isHinted) {
+      setShowHintGlow(true);
+      const timeout = setTimeout(() => setShowHintGlow(false), 1200);
+      return () => clearTimeout(timeout);
+    }
+  }, [isHinted, cell.value]);
 
   // Check for invalid moves when value changes
   useEffect(() => {
@@ -103,6 +127,11 @@ const Cell: React.FC<CellProps> = ({
       baseClasses += ' font-bold text-gray-900 dark:text-gray-100';
     }
 
+    // Hint glow
+    if (showHintGlow) {
+      baseClasses += ' ring-4 ring-yellow-300 ring-opacity-80 z-10';
+    }
+
     return baseClasses;
   };
 
@@ -128,9 +157,61 @@ const Cell: React.FC<CellProps> = ({
     );
   };
 
+  // Enhanced Sparkle SVG
+  const EnhancedSparkle = () => (
+    <>
+      {/* Main sparkle */}
+      <motion.svg
+        initial={{ opacity: 0, scale: 0.5, rotate: 0 }}
+        animate={{ opacity: [0, 1, 0.7, 0], scale: [0.5, 1.3, 1, 1.7], rotate: [0, 20, -20, 0] }}
+        transition={{ duration: 1.2, ease: 'easeInOut' }}
+        className="absolute inset-0 w-full h-full pointer-events-none z-30"
+        viewBox="0 0 40 40"
+        fill="none"
+      >
+        <g>
+          <circle cx="20" cy="20" r="8" fill="#fcd34d" fillOpacity="0.8" />
+          <circle cx="20" cy="20" r="14" fill="#fde68a" fillOpacity="0.4" />
+          <circle cx="20" cy="20" r="20" fill="#fef3c7" fillOpacity="0.18" />
+        </g>
+      </motion.svg>
+      {/* Extra sparkles */}
+      <motion.svg
+        initial={{ opacity: 0, scale: 0.3, rotate: 0 }}
+        animate={{ opacity: [0, 1, 0.7, 0], scale: [0.3, 1, 0.8, 1.2], rotate: [0, -30, 30, 0] }}
+        transition={{ duration: 1.1, delay: 0.1, ease: 'easeInOut' }}
+        className="absolute left-1 top-1 w-3 h-3 pointer-events-none z-30"
+        viewBox="0 0 12 12"
+        fill="none"
+      >
+        <circle cx="6" cy="6" r="6" fill="#fbbf24" fillOpacity="0.7" />
+      </motion.svg>
+      <motion.svg
+        initial={{ opacity: 0, scale: 0.2, rotate: 0 }}
+        animate={{ opacity: [0, 1, 0.7, 0], scale: [0.2, 0.8, 1.1, 1.4], rotate: [0, 45, -45, 0] }}
+        transition={{ duration: 1.0, delay: 0.2, ease: 'easeInOut' }}
+        className="absolute right-1 bottom-1 w-2 h-2 pointer-events-none z-30"
+        viewBox="0 0 8 8"
+        fill="none"
+      >
+        <circle cx="4" cy="4" r="4" fill="#a3e635" fillOpacity="0.7" />
+      </motion.svg>
+      <motion.svg
+        initial={{ opacity: 0, scale: 0.4, rotate: 0 }}
+        animate={{ opacity: [0, 1, 0.7, 0], scale: [0.4, 1.1, 0.9, 1.3], rotate: [0, -15, 15, 0] }}
+        transition={{ duration: 1.1, delay: 0.15, ease: 'easeInOut' }}
+        className="absolute right-2 top-2 w-2 h-2 pointer-events-none z-30"
+        viewBox="0 0 8 8"
+        fill="none"
+      >
+        <circle cx="4" cy="4" r="4" fill="#38bdf8" fillOpacity="0.6" />
+      </motion.svg>
+    </>
+  );
+
   return (
     <motion.div
-      className={getCellClasses()}
+      className={getCellClasses() + ' relative'}
       onClick={handleClick}
       onKeyDown={handleKeyDown}
       tabIndex={0}
@@ -145,6 +226,7 @@ const Cell: React.FC<CellProps> = ({
         ease: "easeInOut"
       }}
     >
+      {showSparkle && <EnhancedSparkle />}
       {cell.value !== 0 ? (
         <motion.span
           initial={{ scale: 0, opacity: 0 }}

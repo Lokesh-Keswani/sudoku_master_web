@@ -4,7 +4,6 @@ import {
   Undo2, 
   Redo2, 
   Lightbulb, 
-  CheckSquare, 
   Play,
   RotateCcw
 } from 'lucide-react';
@@ -18,16 +17,13 @@ interface Toast {
 
 const ControlPanel: React.FC = () => {
   const [toasts, setToasts] = useState<Toast[]>([]);
-  const [isChecking, setIsChecking] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
-  const [conflictingCells, setConflictingCells] = useState<Array<{row: number, col: number}>>([]);
-  const [solutionSteps, setSolutionSteps] = useState<any[]>([]);
+  const [isHinting, setIsHinting] = useState(false);
   
   const {
     undo,
     redo,
     useHint,
-    checkSolution,
     completePuzzle,
     grid,
     undoStack,
@@ -39,7 +35,7 @@ const ControlPanel: React.FC = () => {
 
   // Helper function to check if board is complete
   const isBoardComplete = (grid: any[][]) => {
-    return grid.flat().some(cell => cell.value === 0);
+    return !grid.flat().some(cell => cell.value === 0);
   };
 
   const addToast = (type: Toast['type'], message: string) => {
@@ -68,29 +64,22 @@ const ControlPanel: React.FC = () => {
   };
 
   const handleHint = async () => {
-    const success = await useHint();
-    if (success) {
-      addToast('success', 'Hint applied!');
-    } else {
-      addToast('error', 'No hints available or failed to apply hint');
-    }
-  };
-
-  const handleCheckSolution = async () => {
-    setIsChecking(true);
+    setIsHinting(true);
     try {
-      const result = await checkSolution();
-      if (result.solved) {
-        addToast('success', 'Puzzle solved correctly!');
-      } else if (result.valid) {
-        addToast('info', 'Puzzle is valid but incomplete');
+      const result = await useHint();
+      if (result.success) {
+        if (result.type === 'conflict') {
+          addToast('warning', result.message);
+        } else {
+          addToast('success', result.message);
+        }
       } else {
-        addToast('error', result.error || 'Puzzle has conflicts');
+        addToast('error', result.message || 'No hints available');
       }
     } catch (error) {
-      addToast('error', 'Failed to check solution');
+      addToast('error', 'Failed to get hint');
     } finally {
-      setIsChecking(false);
+      setIsHinting(false);
     }
   };
 
@@ -132,9 +121,8 @@ const ControlPanel: React.FC = () => {
 
   const isUndoDisabled = undoStack.length === 0;
   const isRedoDisabled = redoStack.length === 0;
-  const isHintDisabled = hintsRemaining <= 0 || grid.flat().every(cell => cell.value !== 0);
-  const isCheckDisabled = !isBoardComplete(grid);
-  const isCompleteDisabled = grid.flat().every(cell => cell.value !== 0);
+  const isHintDisabled = hintsRemaining <= 0 || isBoardComplete(grid);
+  const isCompleteDisabled = isBoardComplete(grid);
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-md">
@@ -182,38 +170,20 @@ const ControlPanel: React.FC = () => {
             whileHover={{ scale: isHintDisabled ? 1 : 1.05 }}
             whileTap={{ scale: isHintDisabled ? 1 : 0.95 }}
             onClick={handleHint}
-            disabled={isHintDisabled}
+            disabled={isHintDisabled || isHinting}
             className={`w-full p-3 rounded-lg transition-colors flex items-center justify-center gap-2 ${
-              isHintDisabled 
+              isHintDisabled || isHinting
                 ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed' 
                 : 'bg-yellow-500 text-white hover:bg-yellow-600'
             }`}
-            title={isHintDisabled ? "No hints left or board is full" : `Reveal a hint (${hintsRemaining} left)`}
+            title={isHintDisabled ? "No hints left or board is complete" : `Get a hint (${hintsRemaining} left)`}
           >
-            <Lightbulb className="w-4 h-4" />
-            Hint ({hintsRemaining})
-          </motion.button>
-        </div>
-
-        <div className="mt-3">
-          <motion.button
-            whileHover={{ scale: isCheckDisabled ? 1 : 1.05 }}
-            whileTap={{ scale: isCheckDisabled ? 1 : 0.95 }}
-            onClick={handleCheckSolution}
-            disabled={isCheckDisabled || isChecking}
-            className={`w-full p-3 rounded-lg transition-colors flex items-center justify-center gap-2 ${
-              isCheckDisabled || isChecking
-                ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed' 
-                : 'bg-green-500 text-white hover:bg-green-600'
-            }`}
-            title={isCheckDisabled ? "Complete the board first" : "Check your solution"}
-          >
-            {isChecking ? (
+            {isHinting ? (
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
             ) : (
-              <CheckSquare className="w-4 h-4" />
+              <Lightbulb className="w-4 h-4" />
             )}
-            {isChecking ? 'Checking...' : 'Check Solution'}
+            {isHinting ? 'Getting Hint...' : `Hint (${hintsRemaining})`}
           </motion.button>
         </div>
 

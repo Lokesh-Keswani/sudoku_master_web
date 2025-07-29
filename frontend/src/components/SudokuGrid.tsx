@@ -1,18 +1,42 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import Cell from './Cell';
 import { useSudokuStore } from '../store/sudokuStore';
 import { findConflictingCells } from '../utils/validator';
 
+const isUnitComplete = (cells) => {
+  // All values 1-9, no zero, no duplicates
+  const values = cells.map(cell => cell.value);
+  if (values.includes(0)) return false;
+  const set = new Set(values);
+  return set.size === 9;
+};
+
+const getBoxCells = (grid, boxRow, boxCol) => {
+  const cells = [];
+  for (let r = boxRow * 3; r < boxRow * 3 + 3; r++) {
+    for (let c = boxCol * 3; c < boxCol * 3 + 3; c++) {
+      cells.push({ row: r, col: c, cell: grid[r][c] });
+    }
+  }
+  return cells;
+};
+
 const SudokuGrid: React.FC = () => {
   const { 
     grid, 
     selectedCell, 
-    selectCell 
+    selectCell,
+    hintsRemaining,
+    timer
   } = useSudokuStore();
 
   const [conflictingCells, setConflictingCells] = useState<Array<{row: number, col: number}>>([]);
   const [highlightedNumbers, setHighlightedNumbers] = useState<Set<number>>(new Set());
+  const [sparkleCells, setSparkleCells] = useState<{[key:string]:boolean}>({});
+  const [hintCell, setHintCell] = useState<{row:number,col:number}|null>(null);
+  const prevGridRef = useRef(grid);
+  const prevCompletedUnitsRef = useRef<Set<string>>(new Set());
 
   // Update highlighted numbers when selected cell changes
   useEffect(() => {
@@ -44,6 +68,92 @@ const SudokuGrid: React.FC = () => {
 
     setConflictingCells(conflicts);
   }, [grid]);
+
+  // Sparkle animation for completed row/col/box
+  useEffect(() => {
+    // Clear sparkles if game is complete (complete puzzle was used)
+    if (timer.isGameComplete) {
+      setSparkleCells({});
+      prevCompletedUnitsRef.current.clear();
+      return;
+    }
+
+    const newSparkleCells: {[key:string]:boolean} = {};
+    const currentCompletedUnits = new Set<string>();
+
+    // Check rows
+    for (let r = 0; r < 9; r++) {
+      const rowCells = grid[r];
+      if (isUnitComplete(rowCells)) {
+        const unitKey = `row-${r}`;
+        currentCompletedUnits.add(unitKey);
+        // Only sparkle if this unit was just completed
+        if (!prevCompletedUnitsRef.current.has(unitKey)) {
+          for (let c = 0; c < 9; c++) {
+            newSparkleCells[`${r},${c}`] = true;
+          }
+        }
+      }
+    }
+
+    // Check columns
+    for (let c = 0; c < 9; c++) {
+      const colCells = grid.map(row => row[c]);
+      if (isUnitComplete(colCells)) {
+        const unitKey = `col-${c}`;
+        currentCompletedUnits.add(unitKey);
+        // Only sparkle if this unit was just completed
+        if (!prevCompletedUnitsRef.current.has(unitKey)) {
+          for (let r = 0; r < 9; r++) {
+            newSparkleCells[`${r},${c}`] = true;
+          }
+        }
+      }
+    }
+
+    // Check boxes
+    for (let br = 0; br < 3; br++) {
+      for (let bc = 0; bc < 3; bc++) {
+        const boxCells = getBoxCells(grid, br, bc);
+        if (isUnitComplete(boxCells.map(x=>x.cell))) {
+          const unitKey = `box-${br}-${bc}`;
+          currentCompletedUnits.add(unitKey);
+          // Only sparkle if this unit was just completed
+          if (!prevCompletedUnitsRef.current.has(unitKey)) {
+            for (const {row,col} of boxCells) {
+              newSparkleCells[`${row},${col}`] = true;
+            }
+          }
+        }
+      }
+    }
+
+    setSparkleCells(newSparkleCells);
+    prevCompletedUnitsRef.current = currentCompletedUnits;
+
+    // Clear sparkles after animation duration
+    if (Object.keys(newSparkleCells).length > 0) {
+      setTimeout(() => {
+        setSparkleCells({});
+      }, 1500);
+    }
+  }, [grid, timer.isGameComplete]);
+
+  // Detect hint cell (cell that changed from 0 to value and hintsRemaining decreased)
+  useEffect(() => {
+    const prevGrid = prevGridRef.current;
+    let found = false;
+    for (let r = 0; r < 9; r++) {
+      for (let c = 0; c < 9; c++) {
+        if (prevGrid[r][c].value === 0 && grid[r][c].value !== 0) {
+          setHintCell({row:r,col:c});
+          found = true;
+        }
+      }
+    }
+    if (!found) setHintCell(null);
+    prevGridRef.current = grid;
+  }, [grid, hintsRemaining]);
 
   const handleCellClick = (row: number, col: number) => {
     selectCell(row, col);
@@ -109,6 +219,8 @@ const SudokuGrid: React.FC = () => {
               'border-gray-400',
               'dark:border-gray-600',
             ].join(' ');
+            const sparkle = sparkleCells[`${rowIndex},${colIndex}`] || false;
+            const isHinted = hintCell && hintCell.row === rowIndex && hintCell.col === colIndex;
             return (
               <div
                 key={`${rowIndex}-${colIndex}`}
@@ -124,6 +236,8 @@ const SudokuGrid: React.FC = () => {
                   isFixed={cell.isFixed}
                   onClick={handleCellClick}
                   isConflicting={highlightType === 'conflict'}
+                  sparkle={sparkle}
+                  isHinted={isHinted}
                 />
               </div>
             );

@@ -46,7 +46,6 @@ export type GameState = {
   toggleNote: (row: number, col: number, value: number) => boolean;
   getHint: () => Promise<any>;
   useHint: () => Promise<boolean>;
-  checkSolution: () => Promise<any>;
   completePuzzle: () => Promise<any>;
   undo: () => boolean;
   redo: () => boolean;
@@ -63,6 +62,8 @@ export type GameState = {
   updateNotes: (row: number, col: number, value: number) => void;
   showSolutionReportModal: () => void;
   hideSolutionReportModal: () => void;
+  findConflicts: (grid: SudokuGrid) => Array<{row: number, col: number, value: number}>;
+  checkCellConflict: (grid: SudokuGrid, row: number, col: number, value: number) => boolean;
 };
 
 const API_URL = 'http://localhost:8000';
@@ -175,7 +176,7 @@ export const useSudokuStore = create<GameState>((set, get) => ({
   },
 
   makeMove: async (value: number) => {
-    const { selectedCell, grid, isNotesMode } = get();
+    const { selectedCell, grid, isNotesMode, solution, stopTimer } = get();
     if (!selectedCell) return false;
     
     const { row, col } = selectedCell;
@@ -201,6 +202,16 @@ export const useSudokuStore = create<GameState>((set, get) => ({
     );
 
     set({ grid: newGrid });
+
+    // Check if puzzle is solved
+    if (solution) {
+      const isSolved = newGrid.every((row, r) =>
+        row.every((cell, c) => cell.value === solution[r][c])
+      );
+      if (isSolved) {
+        stopTimer();
+      }
+    }
     return true;
   },
 
@@ -235,72 +246,120 @@ export const useSudokuStore = create<GameState>((set, get) => ({
     const { grid, solution, hintsRemaining } = get();
     if (hintsRemaining <= 0 || !solution) return null;
 
-    try {
-      const response = await fetch(`${API_URL}/api/sudoku/hint`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          grid: grid.map(row => row.map(cell => cell.value)),
-          solution
-        })
-      });
-
-      if (!response.ok) return null;
-
-      const data = await response.json();
-      if (data.moves && data.moves.length > 0) {
-        const hint = data.moves[0];
-        set({ hintsRemaining: hintsRemaining - 1 });
-        return hint;
-      }
-    } catch (error) {
-      console.error('Error getting hint:', error);
+    // First, check for conflicts in the current grid
+    const conflicts = get().findConflicts(grid);
+    if (conflicts.length > 0) {
+      // If there are conflicts, return the first conflict as a hint
+      const firstConflict = conflicts[0];
+      set({ hintsRemaining: hintsRemaining - 1 });
+      return {
+        ...firstConflict,
+        type: 'conflict',
+        message: `There's a conflict in this cell. The number ${firstConflict.value} cannot be placed here.`
+      };
     }
-    return null;
+
+    // Find empty cells that can be filled
+    const emptyCells = [];
+    for (let row = 0; row < 9; row++) {
+      for (let col = 0; col < 9; col++) {
+        if (grid[row][col].value === 0) {
+          const correctValue = solution[row][col];
+          emptyCells.push({ row, col, value: correctValue });
+        }
+      }
+    }
+
+    if (emptyCells.length === 0) {
+      return null; // No empty cells to fill
+    }
+
+    // Return a random empty cell as hint
+    const randomIndex = Math.floor(Math.random() * emptyCells.length);
+    const hint = emptyCells[randomIndex];
+    
+    set({ hintsRemaining: hintsRemaining - 1 });
+    return {
+      ...hint,
+      type: 'fill',
+      message: `You can place ${hint.value} in this cell.`
+    };
   },
 
   useHint: async () => {
     const hint = await get().getHint();
-    if (hint && hint.row !== undefined && hint.col !== undefined && hint.value !== undefined) {
-      // Apply the hint to the grid
-      const { grid } = get();
-      const newGrid = grid.map((r, i) => 
-        r.map((c, j) => 
-          i === hint.row && j === hint.col 
-            ? { ...c, value: hint.value, notes: new Set<number>() }
-            : c
-        )
-      );
-      set({ grid: newGrid });
-      return true;
+    if (hint && hint.row !== undefined && hint.col !== undefined) {
+      const { grid, selectCell } = get();
+      
+      if (hint.type === 'conflict') {
+        // For conflicts, just select the cell to highlight the issue
+        selectCell(hint.row, hint.col);
+        return { success: true, type: 'conflict', message: hint.message };
+      } else if (hint.type === 'fill' && hint.value !== undefined) {
+        // For fill hints, apply the value
+        const newGrid = grid.map((r, i) => 
+          r.map((c, j) => 
+            i === hint.row && j === hint.col 
+              ? { ...c, value: hint.value, notes: new Set<number>() }
+              : c
+          )
+        );
+        set({ grid: newGrid });
+        selectCell(hint.row, hint.col);
+        return { success: true, type: 'fill', message: hint.message };
+      }
     }
-    return false;
+    return { success: false, message: 'No hints available' };
   },
 
-  checkSolution: async () => {
-    const { grid, solution } = get();
+  // Helper function to find conflicts in the grid
+  findConflicts: (grid: SudokuGrid) => {
+    const conflicts = [];
     
-    try {
-      const response = await fetch(`${API_URL}/api/sudoku/check-solution`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          grid: grid.map(row => row.map(cell => cell.value)),
-          solution
-        })
-      });
-
-      if (!response.ok) return { solved: false, error: 'Check failed' };
-
-      const data = await response.json();
-      if (data.solved) {
-        get().stopTimer();
+    for (let row = 0; row < 9; row++) {
+      for (let col = 0; col < 9; col++) {
+        const cell = grid[row][col];
+        if (cell.value !== 0) {
+          // Check if this value conflicts with other cells in the same row, column, or box
+          const hasConflict = get().checkCellConflict(grid, row, col, cell.value);
+          if (hasConflict) {
+            conflicts.push({ row, col, value: cell.value });
+          }
+        }
       }
-      return data;
-    } catch (error) {
-      console.error('Error checking solution:', error);
-      return { solved: false, error: 'Check failed' };
     }
+    
+    return conflicts;
+  },
+
+  // Helper function to check if a specific cell has conflicts
+  checkCellConflict: (grid: SudokuGrid, row: number, col: number, value: number) => {
+    // Check row
+    for (let c = 0; c < 9; c++) {
+      if (c !== col && grid[row][c].value === value) {
+        return true;
+      }
+    }
+    
+    // Check column
+    for (let r = 0; r < 9; r++) {
+      if (r !== row && grid[r][col].value === value) {
+        return true;
+      }
+    }
+    
+    // Check 3x3 box
+    const boxRow = Math.floor(row / 3) * 3;
+    const boxCol = Math.floor(col / 3) * 3;
+    for (let r = boxRow; r < boxRow + 3; r++) {
+      for (let c = boxCol; c < boxCol + 3; c++) {
+        if ((r !== row || c !== col) && grid[r][c].value === value) {
+          return true;
+        }
+      }
+    }
+    
+    return false;
   },
 
   completePuzzle: async () => {
