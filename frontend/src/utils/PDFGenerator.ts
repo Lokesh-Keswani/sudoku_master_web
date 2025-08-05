@@ -12,7 +12,7 @@ export class PDFGenerator {
   private pageHeight: number;
   private margin: number = 20;
 
-  constructor(report: SolvingReport, options: PDFReportOptions = {}) {
+  constructor(report: SolvingReport, options: Partial<PDFReportOptions> = {}) {
     this.report = report;
     this.options = {
       includeTechniqueDetails: true,
@@ -275,7 +275,7 @@ export class PDFGenerator {
     this.doc.text('Technique Details', this.margin, this.currentY);
     this.currentY += 15;
 
-    const uniqueTechniques = [...new Set(this.report.steps.map(step => step.techniqueId))];
+    const uniqueTechniques = this.report.steps.map(step => step.techniqueId).filter((item, index, array) => array.indexOf(item) === index);
     
     uniqueTechniques.forEach(techniqueId => {
       const technique = getTechniqueById(techniqueId);
@@ -400,7 +400,7 @@ export class PDFGenerator {
 
 export const generatePDFReport = async (
   report: SolvingReport,
-  options: PDFReportOptions = {}
+  options: Partial<PDFReportOptions> = {}
 ): Promise<Blob> => {
   const generator = new PDFGenerator(report, options);
   return await generator.generatePDF();
@@ -408,7 +408,7 @@ export const generatePDFReport = async (
 
 export const downloadPDF = async (
   report: SolvingReport,
-  options: PDFReportOptions = {},
+  options: Partial<PDFReportOptions> = {},
   filename?: string
 ): Promise<void> => {
   try {

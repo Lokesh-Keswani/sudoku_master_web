@@ -129,7 +129,7 @@ const MentalPuzzlePreview: React.FC<MentalPuzzlePreviewProps> = ({
           {/* Instructions */}
           <div className="text-center text-gray-600 max-w-md">
             <p className="text-sm">
-              Focus on the highlighted cells and their numbers. You'll need to recall these exact positions and values!
+              Focus on the highlighted cells and their numbers. You&apos;ll need to recall these exact positions and values!
             </p>
           </div>
         </motion.div>

@@ -358,7 +358,7 @@ export class SolutionEngine {
   }
 
   private getPositionsForValueInRow(row: number, value: number): Array<[number, number]> {
-    const positions = [];
+    const positions: Array<[number, number]> = [];
     for (let col = 0; col < 9; col++) {
       if (this.currentGrid[row][col] === 0 && this.getCandidates(row, col).has(value)) {
         positions.push([row, col]);
@@ -368,7 +368,7 @@ export class SolutionEngine {
   }
 
   private getPositionsForValueInColumn(col: number, value: number): Array<[number, number]> {
-    const positions = [];
+    const positions: Array<[number, number]> = [];
     for (let row = 0; row < 9; row++) {
       if (this.currentGrid[row][col] === 0 && this.getCandidates(row, col).has(value)) {
         positions.push([row, col]);
@@ -378,7 +378,7 @@ export class SolutionEngine {
   }
 
   private getPositionsForValueInBox(box: number, value: number): Array<[number, number]> {
-    const positions = [];
+    const positions: Array<[number, number]> = [];
     const boxRow = Math.floor(box / 3) * 3;
     const boxCol = (box % 3) * 3;
     
@@ -393,7 +393,7 @@ export class SolutionEngine {
   }
 
   private getEmptyCellsInRow(row: number): Array<[number, number]> {
-    const empty = [];
+    const empty: Array<[number, number]> = [];
     for (let col = 0; col < 9; col++) {
       if (this.currentGrid[row][col] === 0) {
         empty.push([row, col]);
@@ -403,7 +403,7 @@ export class SolutionEngine {
   }
 
   private getEmptyCellsInColumn(col: number): Array<[number, number]> {
-    const empty = [];
+    const empty: Array<[number, number]> = [];
     for (let row = 0; row < 9; row++) {
       if (this.currentGrid[row][col] === 0) {
         empty.push([row, col]);
@@ -413,7 +413,7 @@ export class SolutionEngine {
   }
 
   private getEmptyCellsInBox(box: number): Array<[number, number]> {
-    const empty = [];
+    const empty: Array<[number, number]> = [];
     const boxRow = Math.floor(box / 3) * 3;
     const boxCol = (box % 3) * 3;
     
@@ -483,7 +483,7 @@ export const generateSolvingReport = (
   const engine = new SolutionEngine(initialGrid, solution);
   const steps = engine.generateSolutionPath();
   
-  const techniquesUsed = [...new Set(steps.map(step => step.techniqueId))];
+  const techniquesUsed = steps.map(step => step.techniqueId).filter((item, index, array) => array.indexOf(item) === index);
   const totalScore = steps.reduce((sum, step) => sum + step.score, 0);
   
   const badges = generateBadges(steps, solvingTime, hintsUsed, difficulty);

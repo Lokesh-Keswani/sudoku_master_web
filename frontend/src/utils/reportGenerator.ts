@@ -93,7 +93,7 @@ export class TrainingReportGenerator {
     const maxWidth = this.pageWidth - (2 * this.margin);
     const lines = this.doc.splitTextToSize(text, maxWidth);
     
-    lines.forEach(line => {
+    lines.forEach((line: string) => {
       if (this.currentY > this.pageHeight - 30) {
         this.doc.addPage();
         this.currentY = 20;
@@ -221,16 +221,16 @@ export class TrainingReportGenerator {
     });
   }
 
-  private addStrengthsAndWeaknesses(analysis: AIAnalysis): void {
+  private addStrengthsAndWeaknesses(analysis: AIAnalysis, skillRatings: SkillRatings): void {
     this.addSubtitle('Strengths & Weaknesses', 14);
     
     // Strengths
     this.addText(`🏆 Strongest Area: ${analysis.strongestArea.replace(/([A-Z])/g, ' $1').trim()}`, 12, '#059669');
-    this.addText(`Rating: ${analysis.skillRatings[analysis.strongestArea as keyof SkillRatings]}%`, 10, '#059669');
+    this.addText(`Rating: ${skillRatings[analysis.strongestArea as keyof SkillRatings]}%`, 10, '#059669');
     
     // Weaknesses
     this.addText(`⚠️ Weakest Area: ${analysis.weakestArea.replace(/([A-Z])/g, ' $1').trim()}`, 12, '#dc2626');
-    this.addText(`Rating: ${analysis.skillRatings[analysis.weakestArea as keyof SkillRatings]}%`, 10, '#dc2626');
+    this.addText(`Rating: ${skillRatings[analysis.weakestArea as keyof SkillRatings]}%`, 10, '#dc2626');
     
     this.currentY += 10;
   }
@@ -291,7 +291,7 @@ export class TrainingReportGenerator {
     }
     
     // Strengths and Weaknesses
-    this.addStrengthsAndWeaknesses(data.analysis);
+    this.addStrengthsAndWeaknesses(data.analysis, data.skillRatings);
     
     // Personalized Suggestions
     if (options.includeSuggestions !== false) {

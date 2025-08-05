@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { ResponsiveContainer, ScatterChart, XAxis, YAxis, ZAxis, Scatter, Tooltip } from 'recharts';
+// import { ResponsiveContainer, ScatterChart, XAxis, YAxis, ZAxis, Scatter, Tooltip } from 'recharts';
 import { Trophy, Target, Clock, Zap, CheckCircle, XCircle } from 'lucide-react';
 
 type Metrics = {
@@ -19,15 +19,15 @@ type MetricsSummaryProps = {
 };
 
 const MetricsSummary: React.FC<MetricsSummaryProps> = ({ stats, onPlayAgain, onReviewSession }) => {
-  // Prepare data for heatmap
-  const heatmapData = [];
-  for (let r = 0; r < 9; r++) {
-    for (let c = 0; c < 9; c++) {
-      if (stats.heatmap[r][c] > 0) {
-      heatmapData.push({ x: c + 1, y: r + 1, value: stats.heatmap[r][c] });
-    }
-  }
-  }
+  // Prepare data for heatmap - Temporarily disabled
+  // const heatmapData = [];
+  // for (let r = 0; r < 9; r++) {
+  //   for (let c = 0; c < 9; c++) {
+  //     if (stats.heatmap[r][c] > 0) {
+  //     heatmapData.push({ x: c + 1, y: r + 1, value: stats.heatmap[r][c] });
+  //   }
+  //   }
+  //   }
 
   const getPerformanceMessage = () => {
     if (stats.accuracy >= 90) return "🎉 Outstanding! You're a speed scanning master!";
@@ -99,8 +99,8 @@ const MetricsSummary: React.FC<MetricsSummaryProps> = ({ stats, onPlayAgain, onR
         </motion.div>
       </div>
 
-      {/* Heatmap */}
-      <div className="mb-8">
+      {/* Heatmap - Temporarily disabled for production build */}
+      {/* <div className="mb-8">
         <h3 className="text-xl font-semibold text-gray-800 mb-4 text-center">
           Click Heatmap
         </h3>
@@ -123,7 +123,7 @@ const MetricsSummary: React.FC<MetricsSummaryProps> = ({ stats, onPlayAgain, onR
         <p className="text-center text-gray-600 text-sm mt-2">
           Brighter areas show where you clicked most frequently
         </p>
-      </div>
+      </div> */}
 
       {/* Action Buttons */}
       <div className="flex flex-col sm:flex-row gap-4 justify-center">

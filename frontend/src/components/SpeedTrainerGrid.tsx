@@ -177,7 +177,7 @@ const SpeedTrainerGrid: React.FC = () => {
             className="flex items-center gap-2 text-red-600 font-bold text-lg"
           >
             <XCircle className="w-6 h-6" />
-            Time's up! Let's see the solution.
+            Time&apos;s up! Let&apos;s see the solution.
           </motion.div>
         )}
 
@@ -189,7 +189,7 @@ const SpeedTrainerGrid: React.FC = () => {
             className="flex items-center gap-2 text-red-600 font-bold text-lg"
           >
             <Clock className="w-6 h-6" />
-            Time expired! Here's the solution.
+            Time expired! Here&apos;s the solution.
           </motion.div>
         )}
       </AnimatePresence>

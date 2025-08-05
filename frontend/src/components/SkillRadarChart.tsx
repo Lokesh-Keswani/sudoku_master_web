@@ -98,7 +98,7 @@ export const SkillRadarChart: React.FC<SkillRadarChartProps> = ({
           color: '#374151',
           font: {
             size: 12,
-            weight: '500',
+            weight: 500,
           },
           usePointStyle: true,
           pointStyle: 'circle',
@@ -155,7 +155,7 @@ export const SkillRadarChart: React.FC<SkillRadarChartProps> = ({
           color: '#374151',
           font: {
             size: 11,
-            weight: '500',
+            weight: 500,
           },
           padding: 15,
         },

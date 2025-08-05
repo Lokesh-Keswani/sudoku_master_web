@@ -87,7 +87,8 @@ class FirestoreClientManager {
 
   async disconnect(): Promise<void> {
     if (this.app) {
-      await this.app.delete();
+      // Firebase Admin apps don't have a delete method
+      // The connection will be cleaned up automatically
       this.app = null;
       this.db = null;
       this.isConnected = false;
@@ -147,7 +148,7 @@ class FirestoreClientManager {
       }
 
       const doc = snapshot.docs[0];
-      return { id: doc.id, ...doc.data() } as LiveGame;
+      return { id: doc.id, ...doc.data() } as unknown as LiveGame;
     } catch (error) {
       console.error('Error fetching live game:', error);
       throw error;
@@ -206,7 +207,7 @@ class FirestoreClientManager {
     this.checkConnection();
     
     try {
-      let query = this.db!.collection('realtime_leaderboard');
+      let query: any = this.db!.collection('realtime_leaderboard');
       
       if (difficulty) {
         query = query.where('difficulty', '==', difficulty);
@@ -224,7 +225,7 @@ class FirestoreClientManager {
 
       const scores: RealTimeLeaderboard[] = [];
       snapshot.forEach((doc: QueryDocumentSnapshot<DocumentData>) => {
-        scores.push({ id: doc.id, ...doc.data() } as RealTimeLeaderboard);
+        scores.push({ id: doc.id, ...doc.data() } as unknown as RealTimeLeaderboard);
       });
 
       // Add rank to each score
@@ -325,7 +326,7 @@ class FirestoreClientManager {
       }
 
       const doc = snapshot.docs[0];
-      return { id: doc.id, ...doc.data() } as GameSession;
+      return { id: doc.id, ...doc.data() } as unknown as GameSession;
     } catch (error) {
       console.error('Error fetching active game session:', error);
       throw error;
@@ -351,7 +352,7 @@ class FirestoreClientManager {
           }
 
           const doc = snapshot.docs[0];
-          const game = { id: doc.id, ...doc.data() } as LiveGame;
+          const game = { id: doc.id, ...doc.data() } as unknown as LiveGame;
           callback(game);
         });
 
@@ -379,7 +380,7 @@ class FirestoreClientManager {
         .onSnapshot((snapshot) => {
           const scores: RealTimeLeaderboard[] = [];
           snapshot.forEach((doc: QueryDocumentSnapshot<DocumentData>) => {
-            scores.push({ id: doc.id, ...doc.data() } as RealTimeLeaderboard);
+            scores.push({ id: doc.id, ...doc.data() } as unknown as RealTimeLeaderboard);
           });
 
           // Add rank to each score
@@ -448,9 +449,4 @@ class FirestoreClientManager {
 // Export singleton instance
 export const firestoreClient = new FirestoreClientManager();
 
-// Export types for use in other modules
-export type {
-  LiveGame,
-  RealTimeLeaderboard,
-  GameSession
-}; 
+// No type exports needed - types are imported from mongoClientTypes.ts 

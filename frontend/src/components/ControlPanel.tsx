@@ -66,7 +66,7 @@ const ControlPanel: React.FC = () => {
   const handleHint = async () => {
     setIsHinting(true);
     try {
-      const result = await useHint();
+      const result = await useSudokuStore.getState().useHint();
       if (result.success) {
         if (result.type === 'conflict') {
           addToast('warning', result.message);

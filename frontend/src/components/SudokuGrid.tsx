@@ -4,7 +4,7 @@ import Cell from './Cell';
 import { useSudokuStore } from '../store/sudokuStore';
 import { findConflictingCells } from '../utils/validator';
 
-const isUnitComplete = (cells) => {
+const isUnitComplete = (cells: any[]) => {
   // All values 1-9, no zero, no duplicates
   const values = cells.map(cell => cell.value);
   if (values.includes(0)) return false;
@@ -12,7 +12,7 @@ const isUnitComplete = (cells) => {
   return set.size === 9;
 };
 
-const getBoxCells = (grid, boxRow, boxCol) => {
+const getBoxCells = (grid: any[][], boxRow: number, boxCol: number) => {
   const cells = [];
   for (let r = boxRow * 3; r < boxRow * 3 + 3; r++) {
     for (let c = boxCol * 3; c < boxCol * 3 + 3; c++) {
@@ -220,7 +220,7 @@ const SudokuGrid: React.FC = () => {
               'dark:border-gray-600',
             ].join(' ');
             const sparkle = sparkleCells[`${rowIndex},${colIndex}`] || false;
-            const isHinted = hintCell && hintCell.row === rowIndex && hintCell.col === colIndex;
+            const isHinted = !!(hintCell && hintCell.row === rowIndex && hintCell.col === colIndex);
             return (
               <div
                 key={`${rowIndex}-${colIndex}`}

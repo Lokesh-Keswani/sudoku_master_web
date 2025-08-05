@@ -38,14 +38,18 @@ const PatternsPage: React.FC = () => {
     } else if (timer === 0 && timedActive) {
       handleTimedEnd();
     }
-    return () => timerRef.current && clearTimeout(timerRef.current!);
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+    };
   }, [mode, sessionActive, timedActive, timer]);
 
   const handleTimedStart = () => {
     setTimedStats({ correct: 0, total: 0, accuracy: 0, patternsPerMin: 0 });
     setTimer(TIMED_DURATION);
     setTimedActive(true);
-    startSession('Timed', level);
+    startSession('Timed', level as 'Easy' | 'Medium' | 'Hard');
   };
 
   const handleTimedAnswer = (correct: boolean) => {
@@ -63,7 +67,11 @@ const PatternsPage: React.FC = () => {
 
   const handleTimedEnd = () => {
     setTimedActive(false);
-    endSession({ ...timedStats, total: timedStats.total, accuracy: timedStats.accuracy, patternsPerMin: timedStats.patternsPerMin });
+    endSession({ 
+      correct: timedStats.correct, 
+      accuracy: timedStats.accuracy, 
+      patternsPerMin: timedStats.patternsPerMin 
+    });
   };
 
   const handleNextPattern = () => {
@@ -195,7 +203,7 @@ const PatternsPage: React.FC = () => {
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
-                onClick={() => startSession('Flashcard', level)}
+                onClick={() => startSession('Flashcard', level as 'Easy' | 'Medium' | 'Hard')}
                 className="px-8 py-4 rounded-xl bg-blue-500 text-white font-bold text-lg shadow-lg hover:bg-blue-600 transition-all flex items-center gap-2 mx-auto"
               >
                 <Play className="w-5 h-5" />
@@ -210,7 +218,7 @@ const PatternsPage: React.FC = () => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
             >
-              <StatsSummary stats={{ ...stats, total: stats.total || timedStats.total || 0 }} />
+              <StatsSummary stats={{ ...stats, total: timedStats.total || 0 }} />
             </motion.div>
           )}
         </div>

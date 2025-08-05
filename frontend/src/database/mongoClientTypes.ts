@@ -91,7 +91,7 @@ export interface RealTimeLeaderboard {
   difficulty: string;
   technique: string;
   solveTime: number;
-  rank: number;
+  rank?: number;
   timestamp: Date;
 }
 
@@ -100,8 +100,8 @@ export interface GameSession {
   userId: string;
   startTime: Date;
   endTime?: Date;
-  totalTime: number;
-  puzzlesCompleted: number;
+  totalPuzzles: number;
+  completedPuzzles: number;
   averageTime: number;
   isActive: boolean;
 } 

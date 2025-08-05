@@ -31,8 +31,7 @@ const ChallengeSessionPage: React.FC = () => {
     endChallenge,
     resetChallenge,
     selectCell,
-    tick,
-    feedback
+    tick
   } = useChallengeStore();
 
   // Start challenge when component mounts
@@ -381,27 +380,27 @@ const ChallengeSessionPage: React.FC = () => {
 
         {/* Feedback Message */}
         <AnimatePresence>
-          {feedback.show && (
+          {currentSession?.feedback.show && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
               className={`fixed top-20 right-4 p-4 rounded-lg shadow-lg z-40 flex items-center space-x-2 ${
-                feedback.type === 'success' 
+                currentSession.feedback.type === 'success' 
                   ? 'bg-green-100 text-green-800 border border-green-200' 
-                  : feedback.type === 'error'
+                  : currentSession.feedback.type === 'error'
                   ? 'bg-red-100 text-red-800 border border-red-200'
                   : 'bg-blue-100 text-blue-800 border border-blue-200'
               }`}
             >
-              {feedback.type === 'success' ? (
+              {currentSession.feedback.type === 'success' ? (
                 <CheckCircle className="w-5 h-5" />
-              ) : feedback.type === 'error' ? (
+              ) : currentSession.feedback.type === 'error' ? (
                 <XCircle className="w-5 h-5" />
               ) : (
                 <AlertCircle className="w-5 h-5" />
               )}
-              <span className="font-medium">{feedback.message}</span>
+              <span className="font-medium">{currentSession.feedback.message}</span>
             </motion.div>
           )}
         </AnimatePresence>

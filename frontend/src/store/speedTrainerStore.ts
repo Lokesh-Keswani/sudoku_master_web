@@ -99,7 +99,7 @@ export const useSpeedTrainerStore = create<SpeedTrainerStore>((set, get) => ({
         gameState: 'playing',
         challengeActive: true,
         puzzle: newPuzzle,
-        section: { ...newSection, targetCell: newCorrectCell },
+        section: { ...newSection, targetCell: newCorrectCell || undefined },
         correctCell: newCorrectCell,
         userSelection: null,
         timer: timeLimit,

@@ -11,7 +11,7 @@ export class SpeechExplanation {
   private onStepChange?: (stepIndex: number) => void;
   private onComplete?: () => void;
 
-  constructor(options: SpeechOptions = {}) {
+  constructor(options: Partial<SpeechOptions> = {}) {
     this.synthesis = window.speechSynthesis;
     this.options = {
       enabled: true,
@@ -197,7 +197,7 @@ export class SpeechExplanation {
   }
 }
 
-export const createSpeechExplanation = (options: SpeechOptions = {}): SpeechExplanation => {
+export const createSpeechExplanation = (options: Partial<SpeechOptions> = {}): SpeechExplanation => {
   return new SpeechExplanation(options);
 };
 

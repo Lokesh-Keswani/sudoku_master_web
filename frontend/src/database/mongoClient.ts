@@ -9,6 +9,10 @@ if (typeof window !== 'undefined') {
 // Re-export types for convenience
 export type { UserStats, SavedPuzzle, UserReport, CompletedPuzzle, LeaderboardScore };
 
+// Singleton pattern for connection management
+let cachedClient: MongoClient | null = null;
+let cachedDb: Db | null = null;
+
 class MongoClientManager {
   private client: MongoClient | null = null;
   private db: Db | null = null;
@@ -37,22 +41,36 @@ class MongoClientManager {
         throw new Error('MONGO_URI environment variable is not set');
       }
 
+      // Use cached connection if available
+      if (cachedClient && cachedDb) {
+        this.client = cachedClient;
+        this.db = cachedDb;
+        this.isConnected = true;
+        this.initializeCollections();
+        return;
+      }
+
       this.client = new MongoClient(mongoUri, {
         maxPoolSize: 10,
+        minPoolSize: 5,
+        maxIdleTimeMS: 30000,
         serverSelectionTimeoutMS: 5000,
         socketTimeoutMS: 45000,
+        connectTimeoutMS: 10000,
+        retryWrites: true,
+        retryReads: true,
       });
 
       await this.client.connect();
       this.db = this.client.db('sudoku_master');
       
+      // Cache the connection
+      cachedClient = this.client;
+      cachedDb = this.db;
+      
       // Initialize collections
-      this.userStatsCollection = this.db.collection<UserStats>('user_stats');
-      this.savedPuzzlesCollection = this.db.collection<SavedPuzzle>('saved_puzzles');
-      this.userReportsCollection = this.db.collection<UserReport>('user_reports');
-      this.completedPuzzlesCollection = this.db.collection<CompletedPuzzle>('puzzles_completed');
-      this.leaderboardCollection = this.db.collection<LeaderboardScore>('leaderboard');
-
+      this.initializeCollections();
+      
       // Create indexes for better performance
       await this.createIndexes();
       
@@ -63,6 +81,16 @@ class MongoClientManager {
       this.isConnected = false;
       throw error;
     }
+  }
+
+  private initializeCollections(): void {
+    if (!this.db) return;
+    
+    this.userStatsCollection = this.db.collection<UserStats>('user_stats');
+    this.savedPuzzlesCollection = this.db.collection<SavedPuzzle>('saved_puzzles');
+    this.userReportsCollection = this.db.collection<UserReport>('user_reports');
+    this.completedPuzzlesCollection = this.db.collection<CompletedPuzzle>('puzzles_completed');
+    this.leaderboardCollection = this.db.collection<LeaderboardScore>('leaderboard');
   }
 
   private async createIndexes(): Promise<void> {
@@ -99,7 +127,7 @@ class MongoClientManager {
   }
 
   async disconnect(): Promise<void> {
-    if (this.client) {
+    if (this.client && this.client !== cachedClient) {
       await this.client.close();
       this.client = null;
       this.db = null;

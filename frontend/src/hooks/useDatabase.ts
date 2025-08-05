@@ -7,10 +7,10 @@ import type {
   UserReport,
   CompletedPuzzle,
   LeaderboardScore,
-  LiveGame,
   RealTimeLeaderboard,
   GameSession
 } from '../database/mongoClientTypes';
+import type { LiveGame } from '../database/firestoreClient';
 
 interface DatabaseState {
   isConnected: boolean;

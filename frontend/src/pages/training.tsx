@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/router';
+import Link from 'next/link';
 import TrainingCard from '../components/TrainingCard';
 import { ProtectedRoute } from '../components/ProtectedRoute';
 import ThemeToggle from '../components/ThemeToggle';
@@ -97,15 +98,15 @@ const TrainingPage: React.FC = () => {
             </div>
             <div className="hidden md:block">
               <div className="ml-10 flex items-baseline space-x-4">
-                <a href="/" className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors">
+                <Link href="/" className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors">
                   Home
-                </a>
-                <a href="/game" className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors">
+                </Link>
+                <Link href="/game" className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors">
                   Play
-                </a>
-                <a href="/training" className="text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-3 py-2 rounded-md text-sm font-medium transition-colors">
+                </Link>
+                <Link href="/training" className="text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-3 py-2 rounded-md text-sm font-medium transition-colors">
                   Training
-                </a>
+                </Link>
               </div>
             </div>
             <div className="flex items-center space-x-4">

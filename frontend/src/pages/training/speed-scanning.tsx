@@ -251,7 +251,7 @@ const SpeedScanningPage: React.FC = () => {
                 {/* Performance Message */}
                 <div className="mb-6">
                   {score >= 90 && (
-                    <p className="text-green-400 text-lg font-semibold">Excellent! You're a Sudoku master!</p>
+                    <p className="text-green-400 text-lg font-semibold">Excellent! You&apos;re a Sudoku master!</p>
                   )}
                   {score >= 70 && score < 90 && (
                     <p className="text-blue-400 text-lg font-semibold">Great job! Keep practicing to improve further.</p>

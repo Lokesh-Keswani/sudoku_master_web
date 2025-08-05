@@ -54,7 +54,7 @@ const ChallengeTimerBar: React.FC<ChallengeTimerBarProps> = ({
                 className="flex items-center space-x-1 text-red-600"
               >
                 <AlertTriangle className="w-4 h-4" />
-                <span className="text-sm font-medium">Time's running out!</span>
+                <span className="text-sm font-medium">Time&apos;s running out!</span>
               </motion.div>
             )}
           </div>

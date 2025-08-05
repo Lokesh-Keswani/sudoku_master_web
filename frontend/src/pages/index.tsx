@@ -188,7 +188,7 @@ const HomePage: React.FC = () => {
             </h2>
             <p className="text-gray-600 max-w-2xl mx-auto">
               Our training modules are designed to systematically improve your Sudoku skills. 
-              From basic techniques to advanced strategies, we've got you covered.
+              From basic techniques to advanced strategies, we&apos;ve got you covered.
             </p>
           </div>
 

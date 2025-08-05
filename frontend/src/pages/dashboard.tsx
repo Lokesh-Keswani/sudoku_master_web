@@ -221,7 +221,7 @@ const DashboardPage: React.FC = () => {
               )}
             </h2>
               <p className="text-gray-600 dark:text-gray-400">
-                Ready to solve some puzzles? Let's continue your journey to becoming a Sudoku expert.
+                Ready to solve some puzzles? Let&apos;s continue your journey to becoming a Sudoku expert.
               </p>
             </motion.div>
 

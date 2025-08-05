@@ -23,7 +23,7 @@ import { generateSolvingReport } from '../utils/solutionEngine';
 import { downloadPDF } from '../utils/PDFGenerator';
 import { createSpeechExplanation } from '../utils/SpeechExplanation';
 import SolutionPlayer from './SolutionPlayer';
-import SudokuGrid from './SudokuGrid';
+import PracticeSudokuGrid from './PracticeSudokuGrid';
 
 interface SolveReportModalProps {
   isOpen: boolean;
@@ -267,17 +267,10 @@ const SolveReportModal: React.FC<SolveReportModalProps> = ({
                 </div>
                 
                 <div className="flex justify-center">
-                  <SudokuGrid
-                    grid={currentGrid.map(row => 
-                      row.map(value => ({
-                        value,
-                        isFixed: initialGrid[row.findIndex(cell => cell === value)]?.[row.findIndex(cell => cell === value)] !== 0,
-                        notes: new Set()
-                      }))
-                    )}
-                    selectedCell={null}
-                    onCellClick={() => {}}
-                    className="w-80 h-80"
+                  <PracticeSudokuGrid
+                    board={currentGrid}
+                    initialBoard={initialGrid}
+                    onCellChange={() => {}}
                   />
                 </div>
 
