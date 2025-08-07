@@ -66,7 +66,7 @@ export type GameState = {
   checkCellConflict: (grid: SudokuGrid, row: number, col: number, value: number) => boolean;
 };
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://sudoku-master-lovat.vercel.app/';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://sudoku-master-backend.vercel.app';
 
 export const useSudokuStore = create<GameState>((set, get) => ({
   // Initial state
