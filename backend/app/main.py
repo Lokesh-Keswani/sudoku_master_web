@@ -2,7 +2,6 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .routers import sudoku, user
-from fastapi.staticfiles import StaticFiles
 from .core import db as mongo_db
 
 app = FastAPI(
@@ -11,16 +10,13 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# Get allowed origins from environment variable
+allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,https://your-frontend-domain.vercel.app").split(",")
+
 # CORS middleware configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:5500",
-        "http://localhost:8000",
-        "https://lokesh-keswani.github.io",
-        "*"
-    ],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -39,6 +35,14 @@ def status():
         "mongodb_connected": db_status
     }
 
+@app.get("/")
+def root():
+    return {
+        "message": "Sudoku Master API",
+        "version": "1.0.0",
+        "status": "running"
+    }
+
 @app.on_event("startup")
 async def startup_db_client():
     await mongo_db.connect_to_mongo()
@@ -46,7 +50,3 @@ async def startup_db_client():
 @app.on_event("shutdown")
 async def shutdown_db_client():
     await mongo_db.close_mongo_connection()
-
-# Serve static files from the frontend directory
-frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "frontend"))
-app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="static")
