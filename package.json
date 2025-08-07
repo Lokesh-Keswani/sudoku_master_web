@@ -1,0 +1,12 @@
+{
+  "dependencies": {
+    "@headlessui/react": "^2.2.4",
+    "chart.js": "^4.5.0",
+    "recharts": "^3.0.2"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "jest": "^30.0.4",
+    "ts-jest": "^29.4.0"
+  }
+}

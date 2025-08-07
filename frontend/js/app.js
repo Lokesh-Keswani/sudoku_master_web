@@ -117,8 +117,18 @@ window.addEventListener('load', () => {
                     }
                 } else if (result.valid) {
                     ui.showMessage(result.message || 'The current board is valid so far.');
-                    // If there's a step to show, highlight it
-                    if (result.step) {
+                    
+                    // If there's a solution path, offer to show it
+                    if (result.solutionPath && result.solutionPath.length > 0) {
+                        const shouldShowSolution = confirm(`Found ${result.solutionPath.length} steps to complete the puzzle. Would you like to see the solution?`);
+                        if (shouldShowSolution) {
+                            ui.fillBoardWithSolution(result.solutionPath);
+                            ui.showSolutionPanel(result.solutionPath);
+                            ui.showMessage('Solution applied!');
+                        }
+                    }
+                    // If there's a single step to show, highlight it
+                    else if (result.step) {
                         if (
                             typeof result.step.row === 'number' && result.step.row >= 0 && result.step.row < 9 &&
                             typeof result.step.col === 'number' && result.step.col >= 0 && result.step.col < 9 &&
@@ -137,17 +147,23 @@ window.addEventListener('load', () => {
                             ui.showMessage('No logical step found. Try again or use a hint.');
                         }
                     }
-                    // If a solution path exists, offer to fill the board
-                    else if (result.solutionPath) {
-                        ui.fillBoardWithSolution(result.solutionPath);
-                        ui.showMessage('Board auto-solved!');
-                        ui.showSolutionPanel(result.solutionPath);
-                    }
                 } else {
-                    ui.showMessage(result.message || 'There is an issue with the current board.');
+                    ui.showMessage(result.message || result.error || 'There is an issue with the current board.');
                     // Show conflicts if they exist
                     if (result.conflicts && result.conflicts.length > 0) {
                         console.log('Conflicts found:', result.conflicts);
+                        // Highlight conflicting cells
+                        result.conflicts.forEach(conflict => {
+                            if (conflict.row !== undefined && conflict.col !== undefined) {
+                                const cell = document.querySelector(`[data-row="${conflict.row}"][data-col="${conflict.col}"]`);
+                                if (cell) {
+                                    cell.style.backgroundColor = '#ffcccc';
+                                    setTimeout(() => {
+                                        cell.style.backgroundColor = '';
+                                    }, 3000);
+                                }
+                            }
+                        });
                     }
                 }
             } catch (error) {

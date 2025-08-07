@@ -60,6 +60,7 @@ class SudokuUI {
         this.setupUndoRedoButtons();
         this.setupNumberPad();
         this.setupDocumentButton();
+        this.setupCompletePuzzleButton();
 
         // Update document button visibility based on game state
         this.updateDocumentButtonVisibility();
@@ -241,6 +242,38 @@ class SudokuUI {
                 generateDocButton.textContent = 'Generate PDF';
             }
         });
+    }
+
+    setupCompletePuzzleButton() {
+        const completeButton = document.getElementById('complete-puzzle');
+        if (completeButton) {
+            completeButton.addEventListener('click', async () => {
+                try {
+                    completeButton.disabled = true;
+                    completeButton.textContent = 'Completing...';
+                    
+                    const result = await this.game.completeIncompletePuzzle();
+                    
+                    if (result.completed) {
+                        this.render();
+                        this.showMessage(result.message);
+                        
+                        // If there's a solution path, show it
+                        if (result.solutionPath && result.solutionPath.length > 0) {
+                            this.showSolutionPanel(result.solutionPath);
+                        }
+                    } else {
+                        this.showMessage(result.message || 'Failed to complete puzzle');
+                    }
+                } catch (error) {
+                    console.error('Error completing puzzle:', error);
+                    this.showMessage('Error completing puzzle: ' + error.message);
+                } finally {
+                    completeButton.disabled = false;
+                    completeButton.textContent = 'Complete Puzzle';
+                }
+            });
+        }
     }
 
     updateDocumentButtonVisibility() {

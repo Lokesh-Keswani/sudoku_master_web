@@ -35,20 +35,25 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
 
 security = HTTPBearer()
 
-def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+def get_current_user_or_guest(credentials: HTTPAuthorizationCredentials = Depends(security)):
     token = credentials.credentials
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id = payload.get("sub")
         email = payload.get("email")
+        is_guest = payload.get("guest", False)
+        if is_guest:
+            return {"user_id": "guest", "email": None, "guest": True}
         if user_id is None or email is None:
             raise HTTPException(status_code=401, detail="Invalid token")
-        return {"user_id": user_id, "email": email}
+        return {"user_id": user_id, "email": email, "guest": False}
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
 @router.post("/signup")
 async def signup(user: UserCreate):
+    if not db.client:
+        raise HTTPException(status_code=503, detail="Database not available")
     users_collection = db.client["sudoku_master"]["users"]
     existing = await users_collection.find_one({"email": user.email})
     if existing:
@@ -64,6 +69,8 @@ async def signup(user: UserCreate):
 
 @router.post("/login")
 async def login(user: UserLogin):
+    if not db.client:
+        raise HTTPException(status_code=503, detail="Database not available")
     users_collection = db.client["sudoku_master"]["users"]
     user_doc = await users_collection.find_one({"email": user.email})
     if not user_doc:
@@ -76,8 +83,21 @@ async def login(user: UserLogin):
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
+@router.post("/guest")
+async def guest_login():
+    """Allow a guest user to get a guest token."""
+    access_token = create_access_token(
+        data={"sub": "guest", "email": None, "guest": True},
+        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
+    return {"access_token": access_token, "token_type": "bearer", "guest": True}
+
 @router.post("/history")
-async def save_history(history: HistoryCreate, user=Depends(get_current_user)):
+async def save_history(history: HistoryCreate, user=Depends(get_current_user_or_guest)):
+    if user.get("guest"):
+        raise HTTPException(status_code=403, detail="Guest users cannot save history.")
+    if not db.client:
+        raise HTTPException(status_code=503, detail="Database not available")
     history_collection = db.client["sudoku_master"]["history"]
     doc = {
         "user_id": user["user_id"],
@@ -89,7 +109,11 @@ async def save_history(history: HistoryCreate, user=Depends(get_current_user)):
     return {"msg": "History saved"}
 
 @router.get("/history")
-async def get_history(user=Depends(get_current_user)):
+async def get_history(user=Depends(get_current_user_or_guest)):
+    if user.get("guest"):
+        raise HTTPException(status_code=403, detail="Guest users have no history.")
+    if not db.client:
+        raise HTTPException(status_code=503, detail="Database not available")
     history_collection = db.client["sudoku_master"]["history"]
     cursor = history_collection.find({"user_id": user["user_id"]})
     history_list = []
@@ -100,7 +124,11 @@ async def get_history(user=Depends(get_current_user)):
     return {"history": history_list}
 
 @router.get("/profile")
-async def get_profile(user=Depends(get_current_user)):
+async def get_profile(user=Depends(get_current_user_or_guest)):
+    if user.get("guest"):
+        raise HTTPException(status_code=403, detail="Guest users have no profile.")
+    if not db.client:
+        raise HTTPException(status_code=503, detail="Database not available")
     users_collection = db.client["sudoku_master"]["users"]
     user_doc = await users_collection.find_one({"_id": ObjectId(user["user_id"])})
     if not user_doc:
@@ -114,8 +142,12 @@ async def get_profile(user=Depends(get_current_user)):
 async def update_profile(
     email: str = Body(None),
     password: str = Body(None),
-    user=Depends(get_current_user)
+    user=Depends(get_current_user_or_guest)
 ):
+    if user.get("guest"):
+        raise HTTPException(status_code=403, detail="Guest users cannot update profile.")
+    if not db.client:
+        raise HTTPException(status_code=503, detail="Database not available")
     users_collection = db.client["sudoku_master"]["users"]
     update_data = {}
     if email:

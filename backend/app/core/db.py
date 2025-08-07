@@ -13,10 +13,19 @@ class DataBase:
 db = DataBase()
 
 async def connect_to_mongo():
-    db.client = AsyncIOMotorClient(MONGODB_URL)
+    try:
+        db.client = AsyncIOMotorClient(MONGODB_URL)
+        # Test the connection
+        await db.client.admin.command('ping')
+        print("Successfully connected to MongoDB")
+    except Exception as e:
+        print(f"Warning: Could not connect to MongoDB: {e}")
+        print("The application will start but database features may not work")
+        db.client = None
 
 async def close_mongo_connection():
-    db.client.close()
+    if db.client:
+        db.client.close()
 
 # Note: Create a .env file in your backend directory with:
 # MONGODB_URL=your_mongodb_atlas_url
