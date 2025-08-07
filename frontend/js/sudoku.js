@@ -12,8 +12,7 @@ class SudokuGame {
         this.difficulty = 'medium';
 
         // API URL - will be updated based on environment
-        this.apiUrl = 'http://localhost:8000';
-
+        this.apiUrl = window.location.hostname === 'localhost' ? 'http://localhost:8000' : 'https://sudoku-master-lovat.vercel.app/'
         // UI state
         this.selectedCell = null;
         this.isNotesMode = false;
